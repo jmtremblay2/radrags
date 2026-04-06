@@ -531,3 +531,51 @@ class RstChunker(DocumentChunker):
             start = max(start + 1, end - self.chunk_overlap)
 
         return chunks
+
+    def _merge_small_chunks(
+        self, chunks: list[Chunk], min_size: int = 300
+    ) -> list[Chunk]:
+        """Merge chunks smaller than *min_size* into the preceding chunk.
+
+        Merging backward keeps the heading metadata correct: a small
+        fragment belongs to the section it came from.  Falls back to
+        merging forward only when the very first chunk is tiny.
+
+        Args:
+            chunks: Ordered list of chunks.
+            min_size: Character threshold below which a chunk is
+                merged into its neighbour.
+
+        Returns:
+            New list with small chunks absorbed.
+        """
+        if len(chunks) < 2:
+            return chunks
+
+        result: list[Chunk] = []
+        for chunk in chunks:
+            if len(chunk.text) < min_size and result:
+                prev = result[-1]
+                result[-1] = Chunk(
+                    heading=prev.heading,
+                    chunk_type=prev.chunk_type,
+                    text=f"{prev.text}\n\n{chunk.text}",
+                    source=prev.source,
+                )
+            elif len(chunk.text) < min_size and not result:
+                result.append(chunk)
+            else:
+                if result and len(result[-1].text) < min_size:
+                    tiny = result.pop()
+                    result.append(
+                        Chunk(
+                            heading=chunk.heading,
+                            chunk_type=chunk.chunk_type,
+                            text=f"{tiny.text}\n\n{chunk.text}",
+                            source=chunk.source,
+                        )
+                    )
+                else:
+                    result.append(chunk)
+
+        return result
