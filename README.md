@@ -28,6 +28,30 @@ Build a wheel package:
 ./build.sh
 ```
 
+## Documentation
+
+Build the docs (static site output in `site/`):
+
+```bash
+./docs.sh
+```
+
+Live preview while editing:
+
+```bash
+./docs.sh --open
+```
+
+What to track in git:
+
+| Path | Tracked | Notes |
+|------|---------|-------|
+| `docs/` | Yes | Hand-written Markdown pages and `:::` directives |
+| `mkdocs.yml` | Yes | MkDocs configuration |
+| `docs.sh` | Yes | Build/serve script |
+| `src/**/*.py` docstrings | Yes | Single source of truth for API docs |
+| `site/` | No | Generated output — in `.gitignore` |
+
 The version is determined automatically:
 - From the current git tag if HEAD is at a tag (e.g. tag `v1.2.3` → version `1.2.3`)
 - Otherwise `0.0.0+<hash>` (e.g. `0.0.0+a1b2c3d`)
