@@ -109,6 +109,16 @@ class RstChunker(DocumentChunker):
         ```
     """
 
+    def __init__(self, chunk_size: int = 2000, chunk_overlap: int = 120) -> None:
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be > 0")
+        if chunk_overlap < 0:
+            raise ValueError("chunk_overlap must be >= 0")
+        if chunk_overlap >= chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size")
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+
     def chunk(self, text: str, docs_root: Path | None = None) -> list[Chunk]:
         """Split RST text into chunks.
 
@@ -447,3 +457,77 @@ class RstChunker(DocumentChunker):
             was_paired.append(False)
             i += 1
         return result, was_paired
+
+    def _split_prose_block(self, text: str) -> list[str]:
+        """Split a long prose block at paragraph boundaries.
+
+        Keeps whole paragraphs together up to ``self.chunk_size``.
+        Falls back to word-boundary splitting via ``_hard_split_text``
+        for single paragraphs that exceed the limit.
+
+        Args:
+            text: Plain prose text (no RST code directives).
+
+        Returns:
+            List of text pieces each approximately
+            ``self.chunk_size`` characters or fewer.
+        """
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        if not paragraphs:
+            return []
+
+        chunks: list[str] = []
+        current = ""
+
+        for para in paragraphs:
+            candidate = para if not current else f"{current}\n\n{para}"
+            if len(candidate) <= self.chunk_size:
+                current = candidate
+                continue
+            if current:
+                chunks.append(current)
+                current = ""
+            if len(para) <= self.chunk_size:
+                current = para
+                continue
+            pieces = self._hard_split_text(para)
+            chunks.extend(pieces[:-1])
+            current = pieces[-1] if pieces else ""
+
+        if current:
+            chunks.append(current)
+        return chunks
+
+    def _hard_split_text(self, text: str) -> list[str]:
+        """Split *text* at word boundaries as a last resort.
+
+        Used inside ``_split_prose_block`` when a single paragraph
+        exceeds ``self.chunk_size``.  Prefers the last space within
+        the target window to avoid cutting mid-word.
+
+        Args:
+            text: A single run of text without blank-line breaks.
+
+        Returns:
+            List of pieces with ``self.chunk_overlap`` characters of
+            shared context between consecutive pieces.
+        """
+        chunks: list[str] = []
+        start = 0
+        step = max(1, self.chunk_size - self.chunk_overlap)
+
+        while start < len(text):
+            end = min(len(text), start + self.chunk_size)
+            if end < len(text):
+                split_at = text.rfind(" ", start, end)
+                if split_at > start + int(self.chunk_size * 0.5):
+                    end = split_at
+
+            piece = text[start:end].strip()
+            if piece:
+                chunks.append(piece)
+            if end >= len(text):
+                break
+            start = max(start + 1, end - self.chunk_overlap)
+
+        return chunks
