@@ -403,3 +403,68 @@ class TestIsMetadataOnly:
             self.chunker._is_metadata_only(".. code-block:: none\n\n   some code")
             is False
         )
+
+
+# ---------------------------------------------------------------------------
+# 2.4 — Prose-code pairing
+# ---------------------------------------------------------------------------
+
+
+class TestPairProseWithCode:
+    """Tests for RstChunker._pair_prose_with_code()."""
+
+    def setup_method(self):
+        self.chunker = RstChunker()
+
+    def test_prose_then_code_merges(self):
+        blocks = [
+            "Install the key with this command:",
+            ".. code-block:: shell\n\n   set interfaces wireguard wg0",
+        ]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 1
+        assert flags[0] is True
+        assert "Install the key" in paired[0]
+        assert "code-block" in paired[0]
+
+    def test_prose_only_not_paired(self):
+        blocks = ["Just some prose.", "More prose."]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 2
+        assert flags == [False, False]
+
+    def test_code_only_not_paired(self):
+        blocks = [".. code-block:: shell\n\n   echo hello"]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 1
+        assert flags == [False]
+
+    def test_two_prose_code_pairs(self):
+        blocks = [
+            "First explanation.",
+            ".. code-block:: shell\n\n   cmd1",
+            "Second explanation.",
+            ".. code-block:: shell\n\n   cmd2",
+        ]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 2
+        assert flags == [True, True]
+
+    def test_prose_code_prose_trailing(self):
+        blocks = [
+            "Explanation.",
+            ".. code-block:: shell\n\n   cmd1",
+            "Trailing prose.",
+        ]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 2
+        assert flags == [True, False]
+
+    def test_parsed_literal_pairs(self):
+        blocks = [
+            "Output example:",
+            ".. parsed-literal::\n\n   some output",
+        ]
+        paired, flags = self.chunker._pair_prose_with_code(blocks)
+        assert len(paired) == 1
+        assert flags[0] is True
