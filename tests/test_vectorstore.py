@@ -53,20 +53,33 @@ SAMPLE_CHUNKS = [
     Chunk(
         heading="WireGuard",
         chunk_type="prose",
-        text="WireGuard is an extremely simple yet fast and modern VPN.",
+        text=(
+            "WireGuard is an extremely simple yet fast and modern VPN that "
+            "utilises state-of-the-art cryptography. It aims to be faster "
+            "and simpler than IPsec. WireGuard is designed as a general "
+            "purpose VPN for running on embedded interfaces."
+        ),
         source="configuration/interfaces/wireguard.rst",
     ),
     Chunk(
-        heading="Firewall",
+        heading="Chocolate Cake",
         chunk_type="prose",
-        text="The firewall module provides stateful packet filtering.",
-        source="configuration/firewall/index.rst",
+        text=(
+            "To bake a chocolate cake, preheat the oven to 350 degrees. "
+            "Mix flour, sugar, cocoa powder, baking soda, and eggs in a "
+            "large bowl. Pour the batter into a greased baking pan."
+        ),
+        source="recipes/chocolate-cake.rst",
     ),
     Chunk(
-        heading="BGP",
+        heading="Astronomy",
         chunk_type="prose",
-        text="BGP is the routing protocol that glues the internet together.",
-        source="configuration/protocols/bgp.rst",
+        text=(
+            "The Andromeda galaxy is the nearest large galaxy to the Milky "
+            "Way. It is approximately 2.5 million light-years from Earth "
+            "and is visible to the naked eye on moonless nights."
+        ),
+        source="science/astronomy.rst",
     ),
 ]
 
@@ -78,7 +91,7 @@ class TestAddAndRetrieve:
     def test_add_and_query_top1(self):
         store = ChromaStore(db_path=None, collection="test_add_query")
         store.add(SAMPLE_CHUNKS)
-        results = store.query("VPN tunnel WireGuard", top_k=1)
+        results = store.query("VPN tunnel encrypted network", top_k=1)
         assert len(results) == 1
         assert "WireGuard" in results[0]["text"]
 
@@ -86,7 +99,7 @@ class TestAddAndRetrieve:
     def test_query_returns_metadata(self):
         store = ChromaStore(db_path=None, collection="test_meta")
         store.add(SAMPLE_CHUNKS)
-        results = store.query("fast VPN", top_k=1)
+        results = store.query("VPN tunnel encrypted network", top_k=1)
         meta = results[0]["metadata"]
         assert meta["source_file"] == "configuration/interfaces/wireguard.rst"
         assert meta["heading_path"] == "WireGuard"
@@ -97,6 +110,6 @@ class TestAddAndRetrieve:
     def test_query_returns_distance(self):
         store = ChromaStore(db_path=None, collection="test_dist")
         store.add(SAMPLE_CHUNKS)
-        results = store.query("VPN tunnel", top_k=1)
+        results = store.query("chocolate baking recipe", top_k=1)
         assert "distance" in results[0]
         assert isinstance(results[0]["distance"], float)

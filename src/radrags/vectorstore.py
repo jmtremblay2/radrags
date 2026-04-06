@@ -101,3 +101,107 @@ class ChromaStore:
         if not isinstance(embedding, list) or not embedding:
             raise RuntimeError("Ollama response did not include a valid embedding")
         return [float(v) for v in embedding]
+
+    @staticmethod
+    def _content_hash(text: str) -> str:
+        """Return the SHA-256 hex digest of *text*.
+
+        Used as the ChromaDB document ID so that identical text always
+        maps to the same vector, making upserts idempotent.
+
+        Args:
+            text: The text to hash.
+
+        Returns:
+            64-character hex string.
+        """
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def add(self, chunks: list[Chunk]) -> None:
+        """Embed and upsert *chunks* into the collection.
+
+        Each chunk is identified by ``sha256(text)``.  Re-adding the
+        same chunk is a no-op (idempotent upsert).
+
+        Args:
+            chunks: List of ``Chunk`` objects to store.
+
+        Example:
+            ```python
+            from radrags.chunker import Chunk
+            from radrags.vectorstore import ChromaStore
+
+            store = ChromaStore(db_path=None, collection="demo")
+            store.add([
+                Chunk("WireGuard", "prose",
+                      "WireGuard is a fast VPN.",
+                      "interfaces/wireguard.rst"),
+            ])
+            ```
+        """
+        ids: list[str] = []
+        docs: list[str] = []
+        metas: list[dict[str, Any]] = []
+        embeds: list[list[float]] = []
+
+        for chunk in chunks:
+            content_hash = self._content_hash(chunk.text)
+            embedding = self.embed(chunk.text)
+
+            ids.append(content_hash)
+            docs.append(chunk.text)
+            metas.append(
+                {
+                    "source_file": chunk.source,
+                    "heading_path": chunk.heading,
+                    "chunk_type": chunk.chunk_type,
+                    "token_count_estimate": max(1, len(chunk.text) // 4),
+                    "content_hash": content_hash,
+                    "embedding_model": self.embedding_model,
+                }
+            )
+            embeds.append(embedding)
+
+        if ids:
+            self._collection.upsert(
+                ids=ids, documents=docs, metadatas=metas, embeddings=embeds
+            )
+
+    def query(self, text: str, top_k: int = 5) -> list[dict[str, Any]]:
+        """Query the collection for chunks similar to *text*.
+
+        Args:
+            text: The query text to embed and search for.
+            top_k: Number of top results to return.
+
+        Returns:
+            List of result dicts, each containing ``"text"``,
+            ``"metadata"``, and ``"distance"`` keys, ordered by
+            ascending distance (most similar first).
+
+        Example:
+            ```python
+            store = ChromaStore(db_path=None, collection="demo")
+            # ... add chunks first ...
+            results = store.query("VPN tunnel", top_k=3)
+            for r in results:
+                print(r["distance"], r["text"][:60])
+            ```
+        """
+        query_embedding = self.embed(text)
+        raw = self._collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+        )
+
+        results: list[dict[str, Any]] = []
+        if raw["documents"] and raw["documents"][0]:
+            for i, doc in enumerate(raw["documents"][0]):
+                results.append(
+                    {
+                        "text": doc,
+                        "metadata": raw["metadatas"][0][i] if raw["metadatas"] else {},
+                        "distance": raw["distances"][0][i] if raw["distances"] else 0.0,
+                    }
+                )
+        return results
