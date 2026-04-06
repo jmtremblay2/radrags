@@ -332,3 +332,74 @@ class TestSplitSections:
         assert ["WireGuard", "Keypairs"] in paths
         for path, blocks in sections:
             assert len(blocks) > 0, f"Section {path} has no content blocks"
+
+
+# ---------------------------------------------------------------------------
+# 2.3 — Metadata filtering
+# ---------------------------------------------------------------------------
+
+
+class TestIsMetadataOnly:
+    """Tests for RstChunker._is_metadata_only()."""
+
+    def setup_method(self):
+        self.chunker = RstChunker()
+
+    # -- Positive cases: should be detected as metadata ----------------
+
+    def test_empty_block(self):
+        assert self.chunker._is_metadata_only("") is True
+
+    def test_whitespace_only(self):
+        assert self.chunker._is_metadata_only("   \n  \n") is True
+
+    def test_field_list(self):
+        assert self.chunker._is_metadata_only(":lastproofread: 2023-01-26") is True
+
+    def test_rst_label(self):
+        assert self.chunker._is_metadata_only(".. _wireguard:") is True
+
+    def test_anonymous_target(self):
+        assert self.chunker._is_metadata_only("__ https://example.com") is True
+
+    def test_figure_directive(self):
+        assert (
+            self.chunker._is_metadata_only(
+                ".. figure:: /_static/images/wireguard_site2site_diagram.jpg"
+            )
+            is True
+        )
+
+    def test_image_directive(self):
+        assert (
+            self.chunker._is_metadata_only(".. image:: /_static/images/logo.png")
+            is True
+        )
+
+    # -- Negative cases: real content, must NOT be filtered -------------
+
+    def test_prose_paragraph(self):
+        assert (
+            self.chunker._is_metadata_only(
+                "WireGuard is an extremely simple yet fast VPN."
+            )
+            is False
+        )
+
+    def test_opcmd_directive(self):
+        assert (
+            self.chunker._is_metadata_only(".. opcmd:: show interfaces wireguard")
+            is False
+        )
+
+    def test_cfgcmd_directive(self):
+        assert (
+            self.chunker._is_metadata_only(".. cfgcmd:: set interfaces wireguard wg0")
+            is False
+        )
+
+    def test_code_block_directive(self):
+        assert (
+            self.chunker._is_metadata_only(".. code-block:: none\n\n   some code")
+            is False
+        )
