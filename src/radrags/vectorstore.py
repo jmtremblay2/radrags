@@ -121,7 +121,10 @@ class ChromaStore:
         """Embed and upsert *chunks* into the collection.
 
         Each chunk is identified by ``sha256(text)``.  Re-adding the
-        same chunk is a no-op (idempotent upsert).
+        same chunk is a no-op (idempotent upsert).  Chunks whose text
+        exceeds ``max_embed_chars`` are split at paragraph boundaries
+        before embedding; all sub-vectors share the same
+        ``content_hash`` in metadata.
 
         Args:
             chunks: List of ``Chunk`` objects to store.
@@ -146,38 +149,138 @@ class ChromaStore:
 
         for chunk in chunks:
             content_hash = self._content_hash(chunk.text)
-            embedding = self.embed(chunk.text)
+            subchunks = self._split_for_embedding(chunk.text)
 
-            ids.append(content_hash)
-            docs.append(chunk.text)
-            metas.append(
-                {
-                    "source_file": chunk.source,
-                    "heading_path": chunk.heading,
-                    "chunk_type": chunk.chunk_type,
-                    "token_count_estimate": max(1, len(chunk.text) // 4),
-                    "content_hash": content_hash,
-                    "embedding_model": self.embedding_model,
-                }
-            )
-            embeds.append(embedding)
+            for idx, subtext in enumerate(subchunks):
+                pairs = self._embed_with_fallback(subtext)
+                for final_text, final_embedding in pairs:
+                    sub_id = (
+                        self._content_hash(f"{content_hash}:{idx}:{final_text}")
+                        if len(subchunks) > 1
+                        else content_hash
+                    )
+
+                    ids.append(sub_id)
+                    docs.append(final_text)
+                    metas.append(
+                        {
+                            "source_file": chunk.source,
+                            "heading_path": chunk.heading,
+                            "chunk_type": chunk.chunk_type,
+                            "token_count_estimate": max(1, len(final_text) // 4),
+                            "content_hash": content_hash,
+                            "embedding_model": self.embedding_model,
+                        }
+                    )
+                    embeds.append(final_embedding)
 
         if ids:
             self._collection.upsert(
                 ids=ids, documents=docs, metadatas=metas, embeddings=embeds
             )
 
-    def query(self, text: str, top_k: int = 5) -> list[dict[str, Any]]:
+    def _split_for_embedding(self, text: str, overlap_chars: int = 300) -> list[str]:
+        """Split *text* into pieces that fit within ``max_embed_chars``.
+
+        Prefers paragraph boundaries; falls back to fixed windowing
+        with overlap when a single paragraph is too long.
+
+        Args:
+            text: The text to split.
+            overlap_chars: Characters of shared context between pieces.
+
+        Returns:
+            List of text pieces, each at most ``max_embed_chars`` long.
+        """
+        text = text.strip()
+        if not text:
+            return []
+        if len(text) <= self.max_embed_chars:
+            return [text]
+
+        parts: list[str] = []
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        current = ""
+        for para in paragraphs:
+            candidate = f"{current}\n\n{para}".strip() if current else para
+            if len(candidate) <= self.max_embed_chars:
+                current = candidate
+                continue
+            if current:
+                parts.append(current)
+                tail = current[-overlap_chars:] if overlap_chars > 0 else ""
+                current = f"{tail}\n\n{para}".strip() if tail else para
+            else:
+                start = 0
+                step = max(1, self.max_embed_chars - overlap_chars)
+                while start < len(para):
+                    piece = para[start : start + self.max_embed_chars].strip()
+                    if piece:
+                        parts.append(piece)
+                    start += step
+                current = ""
+        if current:
+            parts.append(current)
+        return parts
+
+    def _embed_with_fallback(
+        self, text: str, min_chars: int = 500
+    ) -> list[tuple[str, list[float]]]:
+        """Embed *text*, splitting on context-length overflow.
+
+        If the embedding model reports that the input exceeds its
+        context window, the text is split in half and retried
+        recursively.
+
+        Args:
+            text: The text to embed.
+            min_chars: Minimum piece size before giving up.
+
+        Returns:
+            List of ``(text_piece, embedding)`` tuples.
+        """
+        text = text.strip()
+        if not text:
+            return []
+        try:
+            return [(text, self.embed(text))]
+        except ResponseError as exc:
+            message = str(exc).lower()
+            if "input length exceeds the context length" not in message:
+                raise
+            if len(text) <= min_chars:
+                raise RuntimeError(
+                    f"Embedding overflow at minimum split size ({len(text)} chars)"
+                ) from exc
+            mid = len(text) // 2
+            left = text[:mid].strip()
+            right = text[mid:].strip()
+            if not left or not right:
+                raise RuntimeError(
+                    "Unable to split oversized embedding text safely"
+                ) from exc
+            return self._embed_with_fallback(
+                left, min_chars=min_chars
+            ) + self._embed_with_fallback(right, min_chars=min_chars)
+
+    def query(
+        self, text: str, top_k: int = 5, worst: bool = False
+    ) -> list[dict[str, Any]]:
         """Query the collection for chunks similar to *text*.
 
         Args:
             text: The query text to embed and search for.
             top_k: Number of top results to return.
+            worst: When ``True``, return the *farthest* results
+                instead of the closest.  Queries the full collection
+                and returns the last *top_k* results by distance.
 
         Returns:
             List of result dicts, each containing ``"text"``,
-            ``"metadata"``, and ``"distance"`` keys, ordered by
-            ascending distance (most similar first).
+            ``"metadata"``, and ``"distance"`` keys.  Ordered by
+            ascending distance (most similar first) unless
+            ``worst=True``, in which case ordered by descending
+            distance (least similar first).
 
         Example:
             ```python
@@ -189,10 +292,20 @@ class ChromaStore:
             ```
         """
         query_embedding = self.embed(text)
-        raw = self._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-        )
+
+        if worst:
+            n = self._collection.count()
+            if n == 0:
+                return []
+            raw = self._collection.query(
+                query_embeddings=[query_embedding],
+                n_results=n,
+            )
+        else:
+            raw = self._collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+            )
 
         results: list[dict[str, Any]] = []
         if raw["documents"] and raw["documents"][0]:
@@ -201,7 +314,13 @@ class ChromaStore:
                     {
                         "text": doc,
                         "metadata": raw["metadatas"][0][i] if raw["metadatas"] else {},
-                        "distance": raw["distances"][0][i] if raw["distances"] else 0.0,
+                        "distance": (
+                            raw["distances"][0][i] if raw["distances"] else 0.0
+                        ),
                     }
                 )
+
+        if worst:
+            results.sort(key=lambda r: r["distance"], reverse=True)
+            return results[:top_k]
         return results
