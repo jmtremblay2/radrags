@@ -800,3 +800,42 @@ class TestChunkDocs:
         chunks = chunk_docs(VYOS_DOCS)
         for c in chunks:
             assert c.source.endswith(".rst"), f"Bad source: {c.source!r}"
+
+
+# ---------------------------------------------------------------------------
+# 3.2 — Source field populated correctly
+# ---------------------------------------------------------------------------
+
+
+class TestChunkDocsSourceField:
+    """Verify chunk_docs sets source to the correct relative path."""
+
+    def test_wireguard_source_is_relative_path(self):
+        """Chunking only the wireguard file produces the correct relative source."""
+        wg_path = VYOS_DOCS / "configuration" / "interfaces" / "wireguard.rst"
+        if not wg_path.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+
+        chunks = chunk_docs(VYOS_DOCS)
+        wg_chunks = [c for c in chunks if "wireguard" in c.source]
+        assert len(wg_chunks) > 0, "No wireguard chunks found"
+        for c in wg_chunks:
+            assert (
+                c.source == "configuration/interfaces/wireguard.rst"
+            ), f"Expected relative path, got {c.source!r}"
+
+    def test_source_uses_forward_slashes(self):
+        """Source paths always use forward slashes, never backslashes."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert "\\" not in c.source, f"Backslash in source: {c.source!r}"
+
+    def test_source_is_not_absolute(self):
+        """Source paths are relative, never absolute."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert not c.source.startswith("/"), f"Absolute path: {c.source!r}"
