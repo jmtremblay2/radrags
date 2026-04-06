@@ -323,3 +323,59 @@ class RstChunker(DocumentChunker):
             return None
 
         return level, title.strip(), 3
+
+    def _split_sections(
+        self, lines: Sequence[str]
+    ) -> list[tuple[list[str], list[str]]]:
+        """Parse RST *lines* into ``(heading_path, content_blocks)`` tuples.
+
+        Walks the line sequence once.  When a heading is detected the
+        current section is closed and the heading stack is updated so
+        that child headings carry their full ancestor path.
+
+        Args:
+            lines: Full document split into individual lines.
+
+        Returns:
+            List of ``(heading_path, content_blocks)`` pairs where
+            *heading_path* is the ordered list of ancestor heading
+            titles (e.g. ``["WireGuard", "Keypairs"]``) and
+            *content_blocks* is a list of non-empty text blocks for
+            that section.
+        """
+        sections: list[tuple[list[str], list[str]]] = []
+        heading_stack: list[tuple[int, str]] = []
+        current_blocks: list[str] = []
+        prose_buffer: list[str] = []
+
+        def flush_prose() -> None:
+            if prose_buffer:
+                block = "\n".join(prose_buffer).strip()
+                if block:
+                    current_blocks.append(block)
+                prose_buffer.clear()
+
+        def flush_section() -> None:
+            flush_prose()
+            if current_blocks:
+                path = [title for _, title in heading_stack]
+                sections.append((path, current_blocks.copy()))
+                current_blocks.clear()
+
+        i = 0
+        while i < len(lines):
+            heading_info = self._heading_at(lines, i)
+            if heading_info is not None:
+                level, title, consumed = heading_info
+                flush_section()
+                while heading_stack and heading_stack[-1][0] >= level:
+                    heading_stack.pop()
+                heading_stack.append((level, title))
+                i += consumed
+                continue
+
+            prose_buffer.append(lines[i])
+            i += 1
+
+        flush_section()
+        return sections
