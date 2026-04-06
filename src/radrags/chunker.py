@@ -90,6 +90,11 @@ def _is_adornment_line(line: str) -> bool:
 
 _CODE_DIRECTIVE_RE = re.compile(r"^\s*\.\.\s+(?:code-block|parsed-literal|code)::")
 
+_CMDINCLUDE_FULL_RE = re.compile(
+    r"^\s*\.\.\s+cmdinclude::.*(?:\n[ \t]+.*)*",
+    re.MULTILINE,
+)
+
 
 class RstChunker(DocumentChunker):
     """Chunker for reStructuredText documents.
@@ -201,7 +206,58 @@ class RstChunker(DocumentChunker):
             ]
             ```
         """
-        return []
+        text = self._resolve_includes(text)
+        lines = text.splitlines()
+        sections = self._split_sections(lines)
+
+        raw: list[Chunk] = []
+        for heading_path, blocks in sections:
+            heading_label = " > ".join(heading_path) if heading_path else "(root)"
+
+            blocks = [b for b in blocks if not self._is_metadata_only(b)]
+            if not blocks:
+                continue
+
+            paired_blocks, is_paired = self._pair_prose_with_code(blocks)
+
+            for block, was_paired in zip(paired_blocks, is_paired):
+                block = block.strip()
+                if not block:
+                    continue
+
+                if _CODE_DIRECTIVE_RE.match(block.splitlines()[0]):
+                    raw.append(
+                        Chunk(
+                            heading=heading_label,
+                            chunk_type="code",
+                            text=block,
+                            source="",
+                        )
+                    )
+                    continue
+
+                if was_paired or len(block) <= self.chunk_size:
+                    raw.append(
+                        Chunk(
+                            heading=heading_label,
+                            chunk_type="prose",
+                            text=block,
+                            source="",
+                        )
+                    )
+                    continue
+
+                for piece in self._split_prose_block(block):
+                    raw.append(
+                        Chunk(
+                            heading=heading_label,
+                            chunk_type="prose",
+                            text=piece,
+                            source="",
+                        )
+                    )
+
+        return self._merge_small_chunks(raw)
 
     def _heading_at(self, lines: Sequence[str], i: int) -> tuple[int, str, int] | None:
         """Detect an RST heading at position *i* in *lines*.
@@ -388,11 +444,77 @@ class RstChunker(DocumentChunker):
                 i += consumed
                 continue
 
-            prose_buffer.append(lines[i])
+            line = lines[i]
+            if _CODE_DIRECTIVE_RE.match(line):
+                flush_prose()
+                block, next_index = self._collect_code_block(lines, i)
+                current_blocks.append(block)
+                i = next_index
+                continue
+
+            prose_buffer.append(line)
             i += 1
 
         flush_section()
         return sections
+
+    def _collect_code_block(self, lines: Sequence[str], start: int) -> tuple[str, int]:
+        """Collect a code directive at *start* as a single text block.
+
+        Reads the directive line and all following indented lines.
+        Stops at the first non-empty line whose indentation is at or
+        below the directive's own indentation.
+
+        Args:
+            lines: Full document line sequence.
+            start: Index of the directive line.
+
+        Returns:
+            ``(block_text, next_index)`` where *next_index* is the
+            line immediately after the block.
+        """
+        directive = lines[start]
+        directive_indent = len(directive) - len(directive.lstrip(" "))
+
+        block_lines = [directive]
+        i = start + 1
+        content_started = False
+
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            if not stripped:
+                block_lines.append(line)
+                i += 1
+                continue
+
+            indent = len(line) - len(line.lstrip(" "))
+            if indent > directive_indent:
+                content_started = True
+                block_lines.append(line)
+                i += 1
+                continue
+
+            if not content_started:
+                break
+            break
+
+        return "\n".join(block_lines).rstrip(), i
+
+    def _resolve_includes(self, text: str) -> str:
+        """Drop ``.. cmdinclude::`` directives from *text*.
+
+        These reference Sphinx build-time templates with ``{{ var0 }}``
+        placeholders that degrade embedding quality when left in.
+
+        Args:
+            text: Raw RST source text.
+
+        Returns:
+            Text with cmdinclude directives removed.
+        """
+        return _CMDINCLUDE_FULL_RE.sub("", text)
 
     def _is_metadata_only(self, block: str) -> bool:
         """Return ``True`` if *block* contains only RST metadata.

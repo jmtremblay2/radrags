@@ -1,0 +1,97 @@
+[
+  {
+    "heading": "WireGuard",
+    "type": "prose",
+    "text": "WireGuard is an extremely simple yet fast and modern VPN that utilizes\nstate-of-the-art cryptography. See https://www.wireguard.com for more\ninformation.\n\nThis diagram corresponds with the example site to site configuration below.\n\n.. figure:: /_static/images/wireguard_site2site_diagram.jpg\n\nWireGuard requires the generation of a keypair, which includes a private key to\ndecrypt incoming traffic, and a public key for peer(s) to encrypt traffic."
+  },
+  {
+    "heading": "WireGuard > Generate Keypair",
+    "type": "prose",
+    "text": ".. opcmd:: generate pki wireguard key-pair\n\n   It generates the keypair, which includes the public and private parts.\n   The key is not stored on the system - only a keypair is generated.\n\n   .. code-block:: none\n\n     vyos@vyos:~$ generate pki wireguard key-pair\n     Private key: iJJyEARGK52Ls1GYRCcFvPuTj7WyWYDo//BknoDU0XY=\n     Public key: EKY0dxRrSD98QHjfHOK13mZ5PJ7hnddRZt5woB3szyw="
+  },
+  {
+    "heading": "WireGuard > Generate Keypair",
+    "type": "prose",
+    "text": ".. opcmd:: generate pki wireguard key-pair install interface <interface>\n\n   Generates a keypair, which includes the public and private parts, and build\n   a configuration command to install this key to ``interface``.\n\n   .. code-block:: none\n\n      vyos@vyos:~$ generate pki wireguard key-pair install interface wg10\n      \"generate\" CLI command executed from operational level.\n      Generated private-key is not stored to CLI, use configure mode commands to install key:\n\n      set interfaces wireguard wg10 private-key '4Krkv8h6NkAYMMaBWI957yYDJDMvj9URTHstdlOcDU0='\n\n      Corresponding public-key to use on peer system is: 'UxDsYT6EnpTIOKUzvMlw2p0sNOKQvFxEdSVrnNrX1Ro='"
+  },
+  {
+    "heading": "WireGuard > Generate Keypair",
+    "type": "prose",
+    "text": ".. note:: If this command is invoked from configure mode with the ``run``\n      prefix the key is automatically installed to the appropriate interface:\n\n      .. code-block:: none\n\n        vyos@vyos# run generate pki wireguard key-pair install interface wg10\n        \"generate\" CLI command executed from config session.\n        Generated private-key was imported to CLI!\n\n        Use the following command to verify: show interfaces wireguard wg10\n        Corresponding public-key to use on peer system is: '7d9KwabjLhHpJiEJeIGd0CBlao/eTwFOh6xyCovTfG8='\n\n        vyos@vyos# compare\n        [edit interfaces]\n        +wireguard wg10 {\n        +    private-key CJweb8FC6BU3Loj4PC2pn5V82cDjIPs7G1saW0ZfLWc=\n        +}\n\n.. opcmd:: show interfaces wireguard <interface> public-key\n\n   Retrieve public key portion from configured WIreGuard interface.\n\n   .. code-block:: none\n\n     vyos@vyos:~$ show interfaces wireguard wg01 public-key\n     EKY0dxRrSD98QHjfHOK13mZ5PJ7hnddRZt5woB3szyw="
+  },
+  {
+    "heading": "WireGuard > Generate Keypair > Optional",
+    "type": "prose",
+    "text": ".. opcmd:: generate pki wireguard preshared-key\n\n   An additional layer of symmetric-key crypto can be used on top of the\n   asymmetric crypto.\n\n   This is optional.\n\n   .. code-block:: none\n\n     vyos@vyos:~$ generate pki wireguard preshared-key\n     Pre-shared key: OHH2EwZfMNK+1L6BXbYw3bKCtMrfjpR4mCAEeBlFnRs="
+  },
+  {
+    "heading": "WireGuard > Generate Keypair > Optional",
+    "type": "prose",
+    "text": ".. opcmd:: generate pki wireguard preshared-key install interface <interface> peer <peer>\n\n   An additional layer of symmetric-key crypto can be used on top of the\n   asymmetric crypto. This command automatically creates for you the required\n   CLI command to install this PSK for a given peer.\n\n   This is optional.\n\n   .. code-block:: none\n\n     vyos@vyos:~$ generate pki wireguard preshared-key install interface wg10 peer foo\n     \"generate\" CLI command executed from operational level.\n     Generated preshared-key is not stored to CLI, use configure mode commands to install key:\n\n     set interfaces wireguard wg10 peer foo preshared-key '32vQ1w1yFKTna8n7Gu7EimubSe2Y63m8bafz55EG3Ro='\n\n     Pre-shared key: +LuaZ8W6DjsDFJFX3jJzoNqrsXHhvq08JztM9z8LHCs=\n\n.. note:: If this command is invoked from configure mode with the ``run``\n      prefix the key is automatically installed to the appropriate interface:"
+  },
+  {
+    "heading": "WireGuard > Interface configuration",
+    "type": "prose",
+    "text": "The next step is to configure your local side as well as the policy based\ntrusted destination addresses. If you only initiate a connection, the listen\nport and address/port is optional; however, if you act like a server and\nendpoints initiate the connections to your system, you need to define a port\nyour clients can connect to, otherwise the port is randomly chosen and may\nmake connection difficult with firewall rules, since the port may be different\neach time the system is rebooted.\n\nYou will also need the public key of your peer as well as the network(s) you\nwant to tunnel (allowed-ips) to configure a WireGuard tunnel. The public key\nbelow is always the public key from your peer, not your local one.\n\n**local side - commands**\n\n- WireGuard interface itself uses address 10.1.0.1/30\n- We only allow the 192.168.2.0/24 subnet to travel over the tunnel\n- Our remote end of the tunnel for peer `to-wg02` is reachable at 192.0.2.1\n  port 51820\n- The remote peer `to-wg02` uses XMrlPykaxhdAAiSjhtPlvi30NVkvLQliQuKP7AI7CyI=\n  as its public key portion\n- We listen on port 51820\n- We route all traffic for the 192.168.2.0/24 network to interface `wg01`\n\n.. code-block:: none\n\n  set interfaces wireguard wg01 address '10.1.0.1/30'\n  set interfaces wireguard wg01 description 'VPN-to-wg02'\n  set interfaces wireguard wg01 peer to-wg02 allowed-ips '192.168.2.0/24'\n  set interfaces wireguard wg01 peer to-wg02 address '192.0.2.1'\n  set interfaces wireguard wg01 peer to-wg02 port '51820'\n  set interfaces wireguard wg01 peer to-wg02 public-key 'XMrlPykaxhdAAiSjhtPlvi30NVkvLQliQuKP7AI7CyI='\n  set interfaces wireguard wg01 port '51820'\n\n  set protocols static route 192.168.2.0/24 interface wg01"
+  },
+  {
+    "heading": "WireGuard > Interface configuration",
+    "type": "prose",
+    "text": "The last step is to define an interface route for 192.168.2.0/24 to get through\nthe WireGuard interface `wg01`. Multiple IPs or networks can be defined and\nrouted. The last check is allowed-ips which either prevents or allows the\ntraffic.\n\n.. warning:: You can not assign the same allowed-ips statement to multiple\n   WireGuard peers. This a design decision. For more information please\n   check the `WireGuard mailing list`_.\n\n.. cfgcmd:: set interfaces wireguard <interface> private-key <private-key>\n\n  Associates the previously generated private key to a specific WireGuard\n  interface. The private key can be generate via the command\n\n  :opcmd:`generate pki wireguard key-pair`.\n\n  .. code-block:: none\n\n    set interfaces wireguard wg01 private-key 'iJJyEARGK52Ls1GYRCcFvPuTj7WyWYDo//BknoDU0XY='"
+  },
+  {
+    "heading": "WireGuard > Interface configuration",
+    "type": "prose",
+    "text": "The command :opcmd:`show interfaces wireguard wg01 public-key` will then show the\n  public key, which needs to be shared with the peer.\n\n\n**remote side - commands**\n\n.. code-block:: none\n\n  set interfaces wireguard wg01 address '10.1.0.2/30'\n  set interfaces wireguard wg01 description 'VPN-to-wg01'\n  set interfaces wireguard wg01 peer to-wg01 allowed-ips '192.168.1.0/24'\n  set interfaces wireguard wg01 peer to-wg01 address '192.0.2.2'\n  set interfaces wireguard wg01 peer to-wg01 port '51820'\n  set interfaces wireguard wg01 peer to-wg01 public-key 'EKY0dxRrSD98QHjfHOK13mZ5PJ7hnddRZt5woB3szyw='\n  set interfaces wireguard wg01 port '51820'\n  set interfaces wireguard wg01 private-key 'OLTQY3HuK5qWDgVs6fJR093SwPgOmCKkDI1+vJLGoFU='\n\n  set protocols static route 192.168.1.0/24 interface wg01"
+  },
+  {
+    "heading": "WireGuard > Firewall Exceptions",
+    "type": "prose",
+    "text": "For the WireGuard traffic to pass through the WAN interface, you must create a\nfirewall exception.\n\n.. code-block:: none\n\n    set firewall name OUTSIDE_LOCAL rule 10 action accept\n    set firewall name OUTSIDE_LOCAL rule 10 description 'Allow established/related'\n    set firewall name OUTSIDE_LOCAL rule 10 state established enable\n    set firewall name OUTSIDE_LOCAL rule 10 state related enable\n    set firewall name OUTSIDE_LOCAL rule 20 action accept\n    set firewall name OUTSIDE_LOCAL rule 20 description WireGuard_IN\n    set firewall name OUTSIDE_LOCAL rule 20 destination port 51820\n    set firewall name OUTSIDE_LOCAL rule 20 log enable\n    set firewall name OUTSIDE_LOCAL rule 20 protocol udp\n    set firewall name OUTSIDE_LOCAL rule 20 source\n\nYou should also ensure that the OUTISDE_LOCAL firewall group is applied to the\nWAN interface and a direction (local).\n\n.. code-block:: none\n\n    set interfaces ethernet eth0 firewall local name 'OUTSIDE-LOCAL'"
+  },
+  {
+    "heading": "WireGuard > Firewall Exceptions",
+    "type": "prose",
+    "text": "Assure that your firewall rules allow the traffic, in which case you have a\nworking VPN using WireGuard.\n\n.. code-block:: none\n\n  wg01# ping 192.168.1.1\n  PING 192.168.1.1 (192.168.1.1) 56(84) bytes of data.\n  64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=1.16 ms\n  64 bytes from 192.168.1.1: icmp_seq=2 ttl=64 time=1.77 ms\n\n  wg02# ping 192.168.2.1\n  PING 192.168.2.1 (192.168.2.1) 56(84) bytes of data.\n  64 bytes from 192.168.2.1: icmp_seq=1 ttl=64 time=4.40 ms\n  64 bytes from 192.168.2.1: icmp_seq=2 ttl=64 time=1.02 ms\n\nAn additional layer of symmetric-key crypto can be used on top of the\nasymmetric crypto. This is optional.\n\n.. code-block:: none\n\n  vyos@vyos:~$ generate pki wireguard preshared-key\n  Pre-shared key: rvVDOoc2IYEnV+k5p7TNAmHBMEGTHbPU8Qqg8c/sUqc="
+  },
+  {
+    "heading": "WireGuard > Firewall Exceptions",
+    "type": "prose",
+    "text": "Copy the key, as it is not stored on the local filesystem. Because it\nis a symmetric key, only you and your peer should have knowledge of\nits content. Make sure you distribute the key in a safe manner,\n\n.. code-block:: none\n\n  wg01# set interfaces wireguard wg01 peer to-wg02 preshared-key 'rvVDOoc2IYEnV+k5p7TNAmHBMEGTHbPU8Qqg8c/sUqc='\n  wg02# set interfaces wireguard wg01 peer to-wg01 preshared-key 'rvVDOoc2IYEnV+k5p7TNAmHBMEGTHbPU8Qqg8c/sUqc='"
+  },
+  {
+    "heading": "WireGuard > Remote Access \"RoadWarrior\" Example",
+    "type": "prose",
+    "text": "With WireGuard, a Road Warrior VPN config is similar to a site-to-site\nVPN. It just lacks the ``address`` and ``port`` statements.\n\nIn the following example, the IPs for the remote clients are defined in\nthe peers. This allows the peers to interact with one another. In\ncomparison to the site-to-site example the ``persistent-keepalive``\nflag is set to 15 seconds to assure the connection is kept alive.\nThis is mainly relevant if one of the peers is behind NAT and can't\nbe connected to if the connection is lost. To be effective this\nvalue needs to be lower than the UDP timeout.\n\n.. code-block:: none\n\n    wireguard wg01 {\n        address 10.172.24.1/24\n        address 2001:db8:470:22::1/64\n        description RoadWarrior\n        peer MacBook {\n            allowed-ips 10.172.24.30/32\n            allowed-ips 2001:db8:470:22::30/128\n            persistent-keepalive 15\n            pubkey F5MbW7ye7DsoxdOaixjdrudshjjxN5UdNV+pGFHqehc=\n        }\n        peer iPhone {\n            allowed-ips 10.172.24.20/32\n            allowed-ips 2001:db8:470:22::20/128\n            persistent-keepalive 15\n            pubkey BknHcLFo8nOo8Dwq2CjaC/TedchKQ0ebxC7GYn7Al00=\n        }\n        port 2224\n        private-key OLTQY3HuK5qWDgVs6fJR093SwPgOmCKkDI1+vJLGoFU=\n    }"
+  },
+  {
+    "heading": "WireGuard > Remote Access \"RoadWarrior\" Example",
+    "type": "prose",
+    "text": "The following is the config for the iPhone peer above. It's important to\nnote that the ``AllowedIPs`` wildcard setting directs all IPv4 and IPv6 traffic\nthrough the connection.\n\n.. code-block:: none\n\n    [Interface]\n    PrivateKey = ARAKLSDJsadlkfjasdfiowqeruriowqeuasdf=\n    Address = 10.172.24.20/24, 2001:db8:470:22::20/64\n    DNS = 10.0.0.53, 10.0.0.54\n\n    [Peer]\n    PublicKey = RIbtUTCfgzNjnLNPQ/ulkGnnB2vMWHm7l2H/xUfbyjc=\n    AllowedIPs = 0.0.0.0/0, ::/0\n    Endpoint = 192.0.2.1:2224\n    PersistentKeepalive = 25"
+  },
+  {
+    "heading": "WireGuard > Remote Access \"RoadWarrior\" Example",
+    "type": "prose",
+    "text": "However, split-tunneling can be achieved by specifying the remote subnets.\nThis ensures that only traffic destined for the remote site is sent over the\ntunnel. All other traffic is unaffected.\n\n.. code-block:: none\n\n    [Interface]\n    PrivateKey = 8Iasdfweirousd1EVGUk5XsT+wYFZ9mhPnQhmjzaJE6Go=\n    Address = 10.172.24.30/24, 2001:db8:470:22::30/64\n\n    [Peer]\n    PublicKey = RIbtUTCfgzNjnLNPQ/ulkGnnB2vMWHm7l2H/xUfbyjc=\n    AllowedIPs = 10.172.24.30/24, 2001:db8:470:22::/64\n    Endpoint = 192.0.2.1:2224\n    PersistentKeepalive = 25"
+  },
+  {
+    "heading": "WireGuard > Status",
+    "type": "prose",
+    "text": ".. opcmd:: show interfaces wireguard wg01 summary\n\n  Show info about the Wireguard service.\n  It also shows the latest handshake.\n\n  .. code-block:: none\n\n    vyos@vyos:~$ show interfaces wireguard wg01 summary\n    interface: wg01\n      public key:\n      private key: (hidden)\n      listening port: 51820\n\n    peer: <peer pubkey>\n      endpoint: <peer public IP>\n      allowed ips: 10.69.69.2/32\n      latest handshake: 23 hours, 45 minutes, 26 seconds ago\n      transfer: 1.26 MiB received, 6.47 MiB sent"
+  },
+  {
+    "heading": "WireGuard > Status",
+    "type": "prose",
+    "text": ".. opcmd:: show interfaces wireguard\n\n  Get a list of all wireguard interfaces\n\n  .. code-block:: none\n\n    Codes: S - State, L - Link, u - Up, D - Down, A - Admin Down\n    Interface        IP Address                        S/L  Description\n    ---------        ----------                        ---  -----------\n    wg01             10.0.0.1/24                       u/u"
+  },
+  {
+    "heading": "WireGuard > Status",
+    "type": "prose",
+    "text": ".. opcmd:: show interfaces wireguard <interface>\n\n  Show general information about specific WireGuard interface\n\n  .. code-block:: none\n\n    vyos@vyos:~$ show interfaces wireguard wg01\n    interface: wg01\n      address: 10.0.0.1/24\n      public key: h1HkYlSuHdJN6Qv4Hz4bBzjGg5WUty+U1L7DJsZy1iE=\n      private key: (hidden)\n      listening port: 41751\n\n        RX:  bytes  packets  errors  dropped  overrun       mcast\n                 0        0       0        0        0           0\n        TX:  bytes  packets  errors  dropped  carrier  collisions\n                 0        0       0        0        0           0"
+  },
+  {
+    "heading": "WireGuard > Remote Access \"RoadWarrior\" clients",
+    "type": "prose",
+    "text": "Some users tend to connect their mobile devices using WireGuard to their VyOS\nrouter. To ease deployment one can generate a \"per mobile\" configuration from\nthe VyOS CLI.\n\n.. warning:: From a security perspective, it is not recommended to let a third\n  party create and share the private key for a secured connection.\n  You should create the private portion on your own and only hand out the\n  public key. Please keep this in mind when using this convenience feature.\n\n.. opcmd:: generate wireguard client-config <name> interface <interface> server\n   <ip|fqdn> address <client-ip>\n\n  Using this command, you will create a new client configuration which can\n  connect to ``interface`` on this router. The public key from the specified\n  interface is automatically extracted and embedded into the configuration.\n\n  The command also generates a configuration snipped which can be copy/pasted\n  into the VyOS CLI if needed. The supplied ``<name>`` on the CLI will become\n  the peer name in the snippet.\n\n  In addition you will specifiy the IP address or FQDN for the client where it\n  will connect to. The address parameter can be used up to two times and is used\n  to assign the clients specific IPv4 (/32) or IPv6 (/128) address.\n\n  .. figure:: /_static/images/wireguard_qrcode.jpg\n     :alt: WireGuard Client QR code\n\n.. stop_vyoslinter\n\n.. _`WireGuard mailing list`: https://lists.zx2c4.com/pipermail/wireguard/2018-December/003704.html\n\n.. start_vyoslinter"
+  }
+]
