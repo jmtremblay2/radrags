@@ -88,6 +88,9 @@ def _is_adornment_line(line: str) -> bool:
     return bool(line) and len(set(line)) == 1
 
 
+_CODE_DIRECTIVE_RE = re.compile(r"^\s*\.\.\s+(?:code-block|parsed-literal|code)::")
+
+
 class RstChunker(DocumentChunker):
     """Chunker for reStructuredText documents.
 
@@ -410,3 +413,37 @@ class RstChunker(DocumentChunker):
         if re.match(r"\.\.\s+(?:figure|image)::", trimmed):
             return True
         return False
+
+    def _pair_prose_with_code(self, blocks: list[str]) -> tuple[list[str], list[bool]]:
+        """Pair each prose block with an immediately following code block.
+
+        Keeping explanation and example together in one chunk avoids
+        the retrieval problem where a query returns prose without the
+        command syntax, or a code block without its description.
+
+        Args:
+            blocks: List of raw text blocks for one document section.
+
+        Returns:
+            ``(paired_blocks, was_paired_flags)`` — parallel lists
+            where ``was_paired_flags[i]`` is ``True`` when
+            ``paired_blocks[i]`` was formed by merging prose + code.
+        """
+        result: list[str] = []
+        was_paired: list[bool] = []
+        i = 0
+        while i < len(blocks):
+            block = blocks[i]
+            if not _CODE_DIRECTIVE_RE.match(block.splitlines()[0]) and i + 1 < len(
+                blocks
+            ):
+                next_block = blocks[i + 1]
+                if _CODE_DIRECTIVE_RE.match(next_block.splitlines()[0]):
+                    result.append(f"{block}\n\n{next_block}")
+                    was_paired.append(True)
+                    i += 2
+                    continue
+            result.append(block)
+            was_paired.append(False)
+            i += 1
+        return result, was_paired
