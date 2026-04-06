@@ -468,3 +468,54 @@ class TestPairProseWithCode:
         paired, flags = self.chunker._pair_prose_with_code(blocks)
         assert len(paired) == 1
         assert flags[0] is True
+
+
+# ---------------------------------------------------------------------------
+# 2.5 — Prose splitting
+# ---------------------------------------------------------------------------
+
+
+class TestSplitProseBlock:
+    """Tests for RstChunker._split_prose_block()."""
+
+    def test_short_block_stays_whole(self):
+        chunker = RstChunker(chunk_size=200, chunk_overlap=20)
+        pieces = chunker._split_prose_block("A short paragraph.")
+        assert pieces == ["A short paragraph."]
+
+    def test_two_paragraphs_within_limit(self):
+        chunker = RstChunker(chunk_size=200, chunk_overlap=20)
+        text = "First paragraph.\n\nSecond paragraph."
+        pieces = chunker._split_prose_block(text)
+        assert len(pieces) == 1
+        assert "First" in pieces[0] and "Second" in pieces[0]
+
+    def test_splits_at_paragraph_boundary(self):
+        chunker = RstChunker(chunk_size=50, chunk_overlap=10)
+        text = "A" * 40 + "\n\n" + "B" * 40
+        pieces = chunker._split_prose_block(text)
+        assert len(pieces) == 2
+        assert pieces[0].strip() == "A" * 40
+        assert pieces[1].strip() == "B" * 40
+
+    def test_hard_splits_oversized_paragraph(self):
+        chunker = RstChunker(chunk_size=50, chunk_overlap=10)
+        text = " ".join(["word"] * 50)  # ~250 chars, single paragraph
+        pieces = chunker._split_prose_block(text)
+        assert len(pieces) > 1
+        assert all(len(p) <= 60 for p in pieces)  # some tolerance
+
+    def test_empty_text_returns_empty(self):
+        chunker = RstChunker(chunk_size=200, chunk_overlap=20)
+        assert chunker._split_prose_block("") == []
+
+    def test_overlap_between_hard_split_pieces(self):
+        chunker = RstChunker(chunk_size=50, chunk_overlap=15)
+        text = " ".join(["word"] * 50)
+        pieces = chunker._split_prose_block(text)
+        # Consecutive pieces should share some text (overlap)
+        for i in range(len(pieces) - 1):
+            tail = pieces[i][-15:]
+            assert tail in pieces[i + 1] or pieces[i + 1].startswith(
+                tail.lstrip()
+            ), f"No overlap between piece {i} and {i + 1}"
