@@ -1,6 +1,8 @@
 """Document chunking primitives."""
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -30,3 +32,19 @@ class Chunk:
     chunk_type: str
     text: str
     source: str
+
+
+class DocumentChunker(ABC):
+    """Abstract base class for document chunkers."""
+
+    @abstractmethod
+    def chunk(self, text: str, docs_root: Path | None = None) -> list[Chunk]:
+        """Split document text into a list of chunks."""
+
+
+class RstChunker(DocumentChunker):
+    """Chunker for reStructuredText documents."""
+
+    def chunk(self, text: str, docs_root: Path | None = None) -> list[Chunk]:
+        """Split RST text into chunks."""
+        return []
