@@ -57,3 +57,14 @@ for c in chunks:
 ::: radrags.chunker.RstChunker
     options:
       show_source: false
+
+### Complete Example
+
+The integration test `test_rst_chunker_end_to_end` in the test suite
+demonstrates the full chunking pipeline on a short RST document. Its
+docstring explains every chunk produced and the key behaviours at play:
+
+::: tests.test_chunker.test_rst_chunker_end_to_end
+    options:
+      show_source: false
+      heading_level: 4

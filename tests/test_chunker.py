@@ -623,3 +623,141 @@ class TestRstChunkerGolden:
                 f"  got:      {act['text'][:80]!r}\n"
                 f"  expected: {exp['text'][:80]!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Integration — end-to-end chunking demonstration
+# ---------------------------------------------------------------------------
+
+#: A small RST document adapted from the VyOS WireGuard page.
+#: Uses three heading levels to exercise the full RstChunker pipeline:
+#: Form 2 (``#`` overline+underline) for the document title,
+#: Form 1 (``=`` underline) for a section, and
+#: Form 1 (``-`` underline) for a subsection.
+SAMPLE_RST = """\
+#########
+WireGuard
+#########
+
+WireGuard is a simple yet fast VPN that uses state-of-the-art
+cryptography. It aims to be faster and simpler than IPsec while
+being considerably more performant than OpenVPN. WireGuard is
+designed as a general-purpose VPN for running on embedded
+interfaces and super computers alike, fit for many different
+circumstances. It runs over UDP and can be configured with a
+handful of commands. See https://www.wireguard.com for more
+information about the protocol.
+
+Generate Keypair
+================
+
+WireGuard requires the generation of a keypair. The private key
+is used to decrypt incoming traffic, and the public key is shared
+with peer(s) so they can encrypt outgoing traffic destined for
+this host. Keys are generated locally and never leave the device
+unless explicitly exported by the administrator.
+
+.. code-block:: shell
+
+   $ generate pki wireguard key-pair
+   Private key: iJJyEARGK52Ls1GYRCcFvPuTj7WyWYDo//BknoDU0XY=
+   Public key: EKY0dxRrSD98QHjfHOK13mZ5PJ7hnddRZt5woB3szyw=
+
+Server Configuration
+--------------------
+
+Each side of the WireGuard tunnel needs a private key and the
+public key of its remote peer. Configure the local interface
+address and the peer endpoint. The listen-port is optional;
+WireGuard will select a random port if it is not set. Peers
+are added with their public key and the allowed IP ranges
+that should be routed through the tunnel.
+"""
+
+
+def test_rst_chunker_end_to_end():
+    """Chunk a short RST document and verify every field of every chunk.
+
+    This test exercises the complete `RstChunker` pipeline on a small
+    document adapted from the VyOS WireGuard page.  The document uses
+    three heading levels and a code block:
+
+    ```rst
+    #########
+    WireGuard
+    #########
+
+    WireGuard is a simple yet fast VPN ...
+
+    Generate Keypair
+    ================
+
+    WireGuard requires the generation of a keypair ...
+
+    .. code-block:: shell
+
+       $ generate pki wireguard key-pair
+       Private key: iJJy...
+       Public key: EKY0...
+
+    Server Configuration
+    --------------------
+
+    Each side of the WireGuard tunnel needs a private key ...
+    ```
+
+    The chunker produces **three chunks** from this input:
+
+    | Chunk | Heading | Type |
+    |-------|---------|------|
+    | 0 | `WireGuard` | prose |
+    | 1 | `WireGuard > Generate Keypair` | prose |
+    | 2 | `WireGuard > Generate Keypair > Server Configuration` | prose |
+
+    Key behaviours demonstrated:
+
+    - **Heading hierarchy** — child sections carry their full ancestor
+      path joined by ` > ` (e.g. `WireGuard > Generate Keypair`).
+    - **Prose-code pairing** — the code block under *Generate Keypair*
+      is merged into its preceding prose chunk rather than split into
+      a separate code-only chunk, keeping explanation and example together.
+    - **Section boundaries** — each heading starts a new chunk; prose
+      below a heading belongs to that chunk until the next heading.
+    """
+    chunker = RstChunker()
+    chunks = chunker.chunk(SAMPLE_RST)
+
+    assert len(chunks) == 3
+
+    # -- Chunk 0: document-level prose under the top heading ---------------
+    c0 = chunks[0]
+    assert c0.heading == "WireGuard"
+    assert c0.chunk_type == "prose"
+    assert c0.text == (
+        "WireGuard is a simple yet fast VPN that uses state-of-the-art\n"
+        "cryptography. It aims to be faster and simpler than IPsec while\n"
+        "being considerably more performant than OpenVPN. WireGuard is\n"
+        "designed as a general-purpose VPN for running on embedded\n"
+        "interfaces and super computers alike, fit for many different\n"
+        "circumstances. It runs over UDP and can be configured with a\n"
+        "handful of commands. See https://www.wireguard.com for more\n"
+        "information about the protocol."
+    )
+    assert c0.source == ""
+
+    # -- Chunk 1: prose + code block paired together -----------------------
+    c1 = chunks[1]
+    assert c1.heading == "WireGuard > Generate Keypair"
+    assert c1.chunk_type == "prose"
+    assert "keypair" in c1.text.lower()
+    assert ".. code-block:: shell" in c1.text
+    assert "generate pki wireguard key-pair" in c1.text
+    assert c1.source == ""
+
+    # -- Chunk 2: subsection prose -----------------------------------------
+    c2 = chunks[2]
+    assert c2.heading == "WireGuard > Generate Keypair > Server Configuration"
+    assert c2.chunk_type == "prose"
+    assert "private key" in c2.text
+    assert "listen-port" in c2.text
+    assert c2.source == ""

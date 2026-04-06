@@ -1,6 +1,52 @@
 # radrags
 
-RAG experiments.
+RAG experiments — chunking, embedding, and vector search from scratch.
+
+## Quick Example
+
+Given a small RST document with three heading levels:
+
+```rst
+#########
+WireGuard
+#########
+
+WireGuard is a simple yet fast VPN that uses state-of-the-art
+cryptography. It aims to be faster and simpler than IPsec ...
+
+Generate Keypair
+================
+
+WireGuard requires the generation of a keypair ...
+
+.. code-block:: shell
+
+   $ generate pki wireguard key-pair
+
+Server Configuration
+--------------------
+
+Each side of the WireGuard tunnel needs a private key ...
+```
+
+`RstChunker` splits it into three chunks that follow the heading hierarchy:
+
+```python
+from radrags.chunker import RstChunker
+
+chunker = RstChunker()
+chunks = chunker.chunk(open("wireguard.rst").read())
+
+for c in chunks:
+    print(c.heading, "|", c.chunk_type)
+
+# WireGuard | prose
+# WireGuard > Generate Keypair | prose     (code block paired with its prose)
+# WireGuard > Generate Keypair > Server Configuration | prose
+```
+
+See `test_rst_chunker_end_to_end` in the test suite for the full
+input document and exact expected output.
 
 ## Setup
 
