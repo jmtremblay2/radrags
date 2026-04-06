@@ -25,3 +25,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "src/radrags/_version.py"
+
+[dependency-groups]
+dev = [
+    "black>=26.3.1",
+]

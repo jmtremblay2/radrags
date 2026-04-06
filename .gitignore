@@ -28,4 +28,8 @@ src/radrags/_version.py
 .DS_Store
 Thumbs.db
 
-vyosindex
+# Cloned vendor documentation (not checked in)
+vendor/
+
+# Legacy prototype (being replaced by radrags)
+vyosindex/
