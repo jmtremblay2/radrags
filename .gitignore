@@ -26,3 +26,5 @@ src/radrags/_version.py
 # OS
 .DS_Store
 Thumbs.db
+
+vyosindex
