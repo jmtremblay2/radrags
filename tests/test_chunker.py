@@ -152,3 +152,56 @@ class TestHeadingAt:
         lines = ["intro", "WireGuard", "========="]
         result = self.chunker._heading_at(lines, 1)
         assert result == (2, "WireGuard", 2)
+
+    def test_scanning_a_realistic_rst_document(self):
+        """Walk a small RST document and collect every heading the way the
+        section splitter will — this shows the full picture of what
+        _heading_at does in practice.
+
+        The document below uses three heading levels:
+
+            ##########          <- Form 2 (overline+title+underline) → level 1
+            VPN Guide
+            ##########
+
+            WireGuard           <- Form 1 (title+underline with =)  → level 2
+            =========
+
+            Keypairs            <- Form 1 (title+underline with -)  → level 3
+            --------
+        """
+        doc = [
+            "##########",  # 0  overline
+            "VPN Guide",  # 1  title
+            "##########",  # 2  underline
+            "",  # 3
+            "Some intro prose.",  # 4
+            "",  # 5
+            "WireGuard",  # 6  title
+            "=========",  # 7  underline
+            "",  # 8
+            "WireGuard is a fast VPN tunnel.",  # 9
+            "",  # 10
+            "Keypairs",  # 11 title
+            "--------",  # 12 underline
+            "",  # 13
+            "Generate keys with wg genkey.",  # 14
+        ]
+
+        # Scan every line, just like the section splitter does.
+        headings = []
+        i = 0
+        while i < len(doc):
+            result = self.chunker._heading_at(doc, i)
+            if result is not None:
+                level, title, consumed = result
+                headings.append((level, title))
+                i += consumed  # skip past the heading lines
+            else:
+                i += 1
+
+        assert headings == [
+            (1, "VPN Guide"),  # Form 2 — # is level 1
+            (2, "WireGuard"),  # Form 1 — = is level 2
+            (3, "Keypairs"),  # Form 1 — - is level 3
+        ]
