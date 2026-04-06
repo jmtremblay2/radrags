@@ -205,3 +205,130 @@ class TestHeadingAt:
             (2, "WireGuard"),  # Form 1 — = is level 2
             (3, "Keypairs"),  # Form 1 — - is level 3
         ]
+
+
+# ---------------------------------------------------------------------------
+# 2.2 — Section splitting
+# ---------------------------------------------------------------------------
+
+
+class TestSplitSections:
+    """Tests for RstChunker._split_sections()."""
+
+    def setup_method(self):
+        self.chunker = RstChunker()
+
+    def test_empty_document_returns_empty(self):
+        assert self.chunker._split_sections([]) == []
+
+    def test_prose_before_any_heading(self):
+        """Content before the first heading gets an empty heading path."""
+        lines = ["Some intro text.", "", "More intro."]
+        sections = self.chunker._split_sections(lines)
+        assert len(sections) == 1
+        path, blocks = sections[0]
+        assert path == []
+        assert any("Some intro text." in b for b in blocks)
+
+    def test_single_heading_collects_prose(self):
+        lines = [
+            "WireGuard",
+            "=========",
+            "",
+            "WireGuard is a fast VPN.",
+        ]
+        sections = self.chunker._split_sections(lines)
+        assert len(sections) == 1
+        path, blocks = sections[0]
+        assert path == ["WireGuard"]
+        assert any("WireGuard is a fast VPN." in b for b in blocks)
+
+    def test_two_sibling_headings(self):
+        """Two headings at the same level produce two separate sections."""
+        lines = [
+            "WireGuard",
+            "=========",
+            "",
+            "VPN tunnel.",
+            "",
+            "OpenVPN",
+            "=======",
+            "",
+            "SSL-based VPN.",
+        ]
+        sections = self.chunker._split_sections(lines)
+        assert len(sections) == 2
+        assert sections[0][0] == ["WireGuard"]
+        assert sections[1][0] == ["OpenVPN"]
+        assert any("VPN tunnel." in b for b in sections[0][1])
+        assert any("SSL-based VPN." in b for b in sections[1][1])
+
+    def test_nested_heading_builds_path(self):
+        """A child heading includes its parent in the heading path."""
+        lines = [
+            "WireGuard",
+            "=========",
+            "",
+            "Overview.",
+            "",
+            "Keypairs",
+            "--------",
+            "",
+            "Generate keys.",
+        ]
+        sections = self.chunker._split_sections(lines)
+        assert len(sections) == 2
+        assert sections[0][0] == ["WireGuard"]
+        assert sections[1][0] == ["WireGuard", "Keypairs"]
+
+    def test_sibling_after_child_pops_stack(self):
+        """When a sibling appears after a nested child, the stack pops back."""
+        lines = [
+            "##########",
+            "VPN Guide",
+            "##########",
+            "",
+            "Intro.",
+            "",
+            "WireGuard",
+            "=========",
+            "",
+            "Fast VPN.",
+            "",
+            "Keypairs",
+            "--------",
+            "",
+            "Generate keys.",
+            "",
+            "OpenVPN",
+            "=======",
+            "",
+            "SSL VPN.",
+        ]
+        sections = self.chunker._split_sections(lines)
+        paths = [s[0] for s in sections]
+        assert paths == [
+            ["VPN Guide"],
+            ["VPN Guide", "WireGuard"],
+            ["VPN Guide", "WireGuard", "Keypairs"],
+            ["VPN Guide", "OpenVPN"],
+        ]
+
+    def test_heading_only_section_no_prose(self):
+        """A heading with no prose below it still produces no section
+        (nothing to chunk)."""
+        lines = [
+            "WireGuard",
+            "=========",
+            "Keypairs",
+            "--------",
+            "",
+            "Generate keys.",
+        ]
+        sections = self.chunker._split_sections(lines)
+        # WireGuard has no prose — should not appear as a section
+        # Only Keypairs with its prose should appear
+        paths = [s[0] for s in sections]
+        assert ["WireGuard", "Keypairs"] in paths
+        for path, blocks in sections:
+            assert len(blocks) > 0, f"Section {path} has no content blocks"
