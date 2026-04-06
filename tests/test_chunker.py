@@ -579,3 +579,47 @@ class TestMergeSmallChunks:
         assert len(result) == 1
         assert "tiny1" in result[0].text
         assert "tiny2" in result[0].text
+
+
+# ---------------------------------------------------------------------------
+# 2.7 — Full RstChunker + golden fixture
+# ---------------------------------------------------------------------------
+
+import json
+from pathlib import Path
+
+FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+class TestRstChunkerGolden:
+    """End-to-end test against the real VyOS WireGuard RST page."""
+
+    def test_wireguard_matches_golden_fixture(self, wireguard_rst):
+        fixture_path = FIXTURE_DIR / "wireguard_chunks.json"
+        if not fixture_path.exists():
+            pytest.skip("Golden fixture not yet generated")
+
+        expected = json.loads(fixture_path.read_text())
+        chunker = RstChunker()
+        chunks = chunker.chunk(wireguard_rst)
+
+        actual = [
+            {"heading": c.heading, "type": c.chunk_type, "text": c.text} for c in chunks
+        ]
+
+        assert len(actual) == len(
+            expected
+        ), f"Chunk count mismatch: got {len(actual)}, expected {len(expected)}"
+
+        for i, (act, exp) in enumerate(zip(actual, expected)):
+            assert (
+                act["heading"] == exp["heading"]
+            ), f"Chunk {i} heading mismatch: {act['heading']!r} != {exp['heading']!r}"
+            assert (
+                act["type"] == exp["type"]
+            ), f"Chunk {i} type mismatch: {act['type']!r} != {exp['type']!r}"
+            assert act["text"] == exp["text"], (
+                f"Chunk {i} text mismatch (first 80 chars):\n"
+                f"  got:      {act['text'][:80]!r}\n"
+                f"  expected: {exp['text'][:80]!r}"
+            )
