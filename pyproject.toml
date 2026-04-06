@@ -1,0 +1,19 @@
+[project]
+name = "radrags"
+dynamic = ["version"]
+description = "RAG experiments"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/radrags/_version.py"

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# Build artifacts
+dist/
+build/
+
+# Virtual environments
+.venv/
+
+# Lockfile
+uv.lock
+
+# Generated version file
+src/radrags/_version.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
