@@ -9,17 +9,18 @@ Each step follows Red/Green TDD: write a failing test, then the minimal code to 
 The RST chunker is developed and tested against the **VyOS documentation**, an open-source reStructuredText project:
 
 - **GitHub**: <https://github.com/vyos/vyos-documentation>
+- **Pinned tag**: `1.4.3` — all tests and golden fixtures target this single release. Multi-tag indexing is out of scope for now.
 
 ### Setup
 
-Run `./scripts/clone_vyos_docs.sh` to clone the repo into `vendor/vyos-documentation/`. This directory is gitignored — it is not checked into the repo.
+Run `./scripts/clone_vyos_docs.sh` to clone the repo at tag **1.4.3** into `vendor/vyos-documentation/`. This directory is gitignored — it is not checked into the repo. The script is idempotent: re-running it ensures the correct tag is checked out.
 
 ### Test fixtures via `conftest.py`
 
-`tests/conftest.py` defines pytest fixtures that load example RST files from the cloned VyOS docs. This avoids copying large files into the test tree and keeps tests against real-world documents:
+`tests/conftest.py` defines pytest fixtures that load example RST files from the cloned VyOS docs. The pinned tag is hardcoded as `VYOS_DOCS_TAG = "1.4.3"` in `conftest.py`. This avoids copying large files into the test tree and keeps tests against real-world documents:
 
-- **`wireguard_rst`** — `vendor/vyos-documentation/docs/configuration/interfaces/wireguard.rst` (435 lines). A medium-complexity page with headings, code blocks, field lists, labels, and `cmdinclude` directives. Used as the golden-file target for `RstChunker`.
-- **`firewall_rst`** — `vendor/vyos-documentation/docs/configuration/firewall/index.rst` (227 lines). A shorter page useful for edge-case and section-splitting tests.
+- **`wireguard_rst`** — `vendor/vyos-documentation/docs/configuration/interfaces/wireguard.rst` (427 lines). A medium-complexity page with headings, code blocks, field lists, labels, and `cmdinclude` directives. Used as the golden-file target for `RstChunker`.
+- **`firewall_rst`** — `vendor/vyos-documentation/docs/configuration/firewall/index.rst` (180 lines). A shorter page useful for edge-case and section-splitting tests.
 
 Each fixture reads the file at test time and `pytest.skip()`s if `vendor/` is not cloned, so CI can optionally skip integration-style tests.
 
