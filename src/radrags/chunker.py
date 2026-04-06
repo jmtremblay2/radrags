@@ -701,3 +701,52 @@ class RstChunker(DocumentChunker):
                     result.append(chunk)
 
         return result
+
+
+def chunk_docs(docs_root: Path, chunker: DocumentChunker | None = None) -> list[Chunk]:
+    """Recursively chunk every RST file under *docs_root*.
+
+    Walks the directory tree, reads each ``.rst`` file, runs it through
+    a ``DocumentChunker``, and populates every resulting ``Chunk.source``
+    with the file path relative to *docs_root*.
+
+    Args:
+        docs_root: Root directory of the documentation tree.
+        chunker: Chunker instance to use.  Defaults to ``RstChunker()``
+            when ``None``.
+
+    Returns:
+        Flat list of ``Chunk`` objects from all discovered files,
+        ordered by file path then document order within each file.
+
+    Example:
+        ```python
+        from pathlib import Path
+        from radrags.chunker import chunk_docs
+
+        chunks = chunk_docs(Path("vendor/vyos-documentation/docs"))
+        for c in chunks[:3]:
+            print(c.source, c.heading)
+        ```
+    """
+    if chunker is None:
+        chunker = RstChunker()
+
+    docs_root = docs_root.resolve()
+    all_chunks: list[Chunk] = []
+
+    for rst_path in sorted(docs_root.rglob("*.rst")):
+        text = rst_path.read_text(encoding="utf-8")
+        rel = str(rst_path.relative_to(docs_root))
+        file_chunks = chunker.chunk(text, docs_root=docs_root)
+        for chunk in file_chunks:
+            all_chunks.append(
+                Chunk(
+                    heading=chunk.heading,
+                    chunk_type=chunk.chunk_type,
+                    text=chunk.text,
+                    source=rel,
+                )
+            )
+
+    return all_chunks
