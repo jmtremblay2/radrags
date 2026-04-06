@@ -4,6 +4,27 @@ Each step follows Red/Green TDD: write a failing test, then the minimal code to 
 
 ---
 
+## Test Data: VyOS Documentation
+
+The RST chunker is developed and tested against the **VyOS documentation**, an open-source reStructuredText project:
+
+- **GitHub**: <https://github.com/vyos/vyos-documentation>
+
+### Setup
+
+Run `./scripts/clone_vyos_docs.sh` to clone the repo into `vendor/vyos-documentation/`. This directory is gitignored — it is not checked into the repo.
+
+### Test fixtures via `conftest.py`
+
+`tests/conftest.py` defines pytest fixtures that load example RST files from the cloned VyOS docs. This avoids copying large files into the test tree and keeps tests against real-world documents:
+
+- **`wireguard_rst`** — `vendor/vyos-documentation/docs/configuration/interfaces/wireguard.rst` (435 lines). A medium-complexity page with headings, code blocks, field lists, labels, and `cmdinclude` directives. Used as the golden-file target for `RstChunker`.
+- **`firewall_rst`** — `vendor/vyos-documentation/docs/configuration/firewall/index.rst` (227 lines). A shorter page useful for edge-case and section-splitting tests.
+
+Each fixture reads the file at test time and `pytest.skip()`s if `vendor/` is not cloned, so CI can optionally skip integration-style tests.
+
+---
+
 ## Phase 1: Foundation
 
 ### 1.1 Chunk dataclass
