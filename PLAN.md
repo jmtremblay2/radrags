@@ -74,59 +74,51 @@ Each fixture reads the file at test time and `pytest.skip()`s if `vendor/` is no
 
 ---
 
-## Phase 3: MarkdownChunker
+## Phase 3: Doc-tree Traversal
 
-### 3.1 Heading detection (Markdown)
-- **Test**: `# H1`, `## H2` through `###### H6` are detected with correct levels.
-- **Impl**: Heading-detection helper for Markdown `#`-style headings.
+### 3.1 Discover RST files
+- **Test**: Point `chunk_docs(docs_root)` at `vendor/vyos-documentation/docs`. Assert it returns a non-empty `list[Chunk]`, every chunk has a non-empty `source` field, and all sources end with `.rst`. Skip if vendor not cloned.
+- **Impl**: Add `chunk_docs(docs_root: Path, chunker: DocumentChunker | None = None) -> list[Chunk]` to `radrags.chunker`. Recursively globs `*.rst`, chunks each file, sets `Chunk.source` to the path relative to `docs_root`.
 
-### 3.2 Front-matter stripping
-- **Test**: YAML (`---`) and TOML (`+++`) front matter is removed before chunking.
-- **Impl**: Strip function.
-
-### 3.3 Reference-link & shortcode filtering
-- **Test**: Reference-link definitions (`[label]: /url`) and self-closing Hugo shortcodes are dropped.
-- **Impl**: Filter regexes.
-
-### 3.4 Fenced code block pairing
-- **Test**: Prose followed by a fenced code block (triple-backtick or `~~~`) merges, similar to RST prose-code pairing.
-- **Impl**: Fenced-code detection and pairing.
-
-### 3.5 Full MarkdownChunker + golden fixture
-- **Test**: `MarkdownChunker().chunk(known_md)` matches a JSON fixture.
-- **Impl**: Wire into `MarkdownChunker.chunk()`. Generate fixture from a reference doc (e.g. Hugo quick-start).
+### 3.2 Source field populated correctly
+- **Test**: Chunk a single known file via `chunk_docs`. Assert every returned chunk's `source` matches the expected relative path (e.g. `configuration/interfaces/wireguard.rst`).
+- **Impl**: Already wired in 3.1 — this test verifies the path logic specifically.
 
 ---
 
-## Phase 4: Embeddings
+## Phase 4: Vector Store (ChromaDB)
 
-### 4.1 Embedding function
-- **Test**: Mock the Ollama client; call `get_embedding(text)` and assert it returns a `list[float]`.
-- **Impl**: Add `src/radrags/embeddings.py` with `get_embedding(text, model="nomic-embed-text") -> list[float]` using the `ollama` client.
+### 4.1 Embed text via Ollama
+- **Test**: Call `ChromaStore.embed("hello world")`, assert it returns a `list[float]` of length 768. Requires a running Ollama with `nomic-embed-text`. Skip if Ollama is unreachable.
+- **Impl**: Add `src/radrags/vectorstore.py` with `ChromaStore` class. Constructor takes `db_path`, `collection`, `embedding_model` (default `nomic-embed-text`), `ollama_host`. Implement `embed(text) -> list[float]` using `ollama.Client.embeddings()`.
 
-### 4.2 Embed-with-fallback (context overflow)
-- **Test**: When Ollama raises a context-length error, the text is split in half and each half is embedded separately. Returns `list[tuple[str, list[float]]]`.
-- **Impl**: Recursive split-and-retry logic (`embed_with_fallback`).
+### 4.2 Add and retrieve chunks
+- **Test**: Create a `ChromaStore` with an ephemeral in-memory ChromaDB client. Add a handful of hand-crafted `Chunk` objects via `add(chunks)`. Query with a string semantically close to one chunk. Assert the top-1 result contains the expected chunk text and metadata (`source_file`, `heading_path`, `chunk_type`, `embedding_model`). Requires Ollama.
+- **Impl**: Implement `add(chunks)` — for each chunk, compute `sha256(text)` as the ID, embed the text, and upsert with metadata. Implement `query(text, top_k)` — embed the query, call `collection.query`, return results with text, metadata, and distance.
+
+### 4.3 Idempotent upsert
+- **Test**: `add()` the same chunks twice. Assert collection count doesn't double (same `sha256` ID → no duplicates).
+- **Impl**: Already handled by using `upsert` with content-hash IDs — this test verifies it.
+
+### 4.4 Worst match (farthest result)
+- **Test**: Add several diverse chunks. Call `query(text, top_k=1, worst=True)` (or equivalent). Assert the returned chunk is the one with the highest cosine distance from the query.
+- **Impl**: Implement worst-match by querying the full collection and returning the last result.
+
+### 4.5 Rebuild collection
+- **Test**: Add chunks, then construct a new `ChromaStore` with `rebuild=True`. Assert the collection is empty.
+- **Impl**: When `rebuild=True`, delete the collection before calling `get_or_create_collection`.
+
+### 4.6 Oversized chunk splitting for embedding
+- **Test**: Create a chunk with text > 6000 chars. Call `add([chunk])`. Assert the collection has more than one vector (the chunk was split), and all vectors share the same `content_hash` in metadata.
+- **Impl**: Before embedding, split text exceeding `max_embed_chars` at paragraph boundaries with overlap. Use `embed_with_fallback` (binary-split on context-length error) as a safety net.
 
 ---
 
-## Phase 5: Vector Store (ChromaDB)
+## Phase 5: End-to-end Retrieval
 
-### 5.1 VectorStore ABC
-- **Test**: Subclassing without implementing required methods raises `TypeError`.
-- **Impl**: Add `src/radrags/vectorstore.py` with abstract `VectorStore` defining `upsert(chunks, embeddings, metadatas)` and `query(embedding, n_results)`.
-
-### 5.2 ChromaDB adapter
-- **Test**: Using a transient in-memory ChromaDB client, upsert chunks and query by embedding. Assert correct results returned.
-- **Impl**: `ChromaStore` class wrapping `chromadb.Client()`.
-
-### 5.3 Metadata & ID generation
-- **Test**: Chunk IDs are deterministic SHA256 hashes. Metadata includes `source_file`, `heading_path`, `chunk_type`, `content_hash`, `split_index`, `split_total`.
-- **Impl**: Helper to build metadata dicts and IDs.
-
-### 5.4 Pre-embedding split (`split_for_embedding`)
-- **Test**: Chunks exceeding `max_embed_chars` are split at paragraph boundaries with overlap. Short chunks pass through unchanged.
-- **Impl**: Function in `embeddings.py` or a shared utility.
+### 5.1 Index real docs and query
+- **Test**: Use `chunk_docs` on the VyOS vendor docs (or a small subset via `max_files`), feed chunks into `ChromaStore.add()`, then `query("how to generate wireguard keys")`. Assert the top result's `source_file` contains `wireguard` and the text mentions key generation. Requires Ollama + vendor docs.
+- **Impl**: No new production code — this wires together Phases 2–4 and proves the pipeline works end to end.
 
 ---
 

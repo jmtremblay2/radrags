@@ -5,6 +5,7 @@ from radrags.chunker import (
     DocumentChunker,
     HEADING_LEVELS,
     RstChunker,
+    chunk_docs,
     _is_adornment_line,
 )
 
@@ -761,3 +762,80 @@ def test_rst_chunker_end_to_end():
     assert "private key" in c2.text
     assert "listen-port" in c2.text
     assert c2.source == ""
+
+
+# ---------------------------------------------------------------------------
+# 3.1 — Discover RST files (chunk_docs)
+# ---------------------------------------------------------------------------
+
+VYOS_DOCS = (
+    Path(__file__).resolve().parent.parent / "vendor" / "vyos-documentation" / "docs"
+)
+
+
+class TestChunkDocs:
+    """Tests for chunk_docs() doc-tree traversal."""
+
+    def test_returns_non_empty_list_of_chunks(self):
+        """chunk_docs on the VyOS docs tree returns a non-empty list."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        assert isinstance(chunks, list)
+        assert len(chunks) > 0
+        assert all(isinstance(c, Chunk) for c in chunks)
+
+    def test_every_chunk_has_non_empty_source(self):
+        """Every chunk returned by chunk_docs has a non-empty source field."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert c.source, f"Chunk has empty source: heading={c.heading!r}"
+
+    def test_all_sources_end_with_rst(self):
+        """Every chunk's source field ends with .rst."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert c.source.endswith(".rst"), f"Bad source: {c.source!r}"
+
+
+# ---------------------------------------------------------------------------
+# 3.2 — Source field populated correctly
+# ---------------------------------------------------------------------------
+
+
+class TestChunkDocsSourceField:
+    """Verify chunk_docs sets source to the correct relative path."""
+
+    def test_wireguard_source_is_relative_path(self):
+        """Chunking only the wireguard file produces the correct relative source."""
+        wg_path = VYOS_DOCS / "configuration" / "interfaces" / "wireguard.rst"
+        if not wg_path.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+
+        chunks = chunk_docs(VYOS_DOCS)
+        wg_chunks = [c for c in chunks if "wireguard" in c.source]
+        assert len(wg_chunks) > 0, "No wireguard chunks found"
+        for c in wg_chunks:
+            assert (
+                c.source == "configuration/interfaces/wireguard.rst"
+            ), f"Expected relative path, got {c.source!r}"
+
+    def test_source_uses_forward_slashes(self):
+        """Source paths always use forward slashes, never backslashes."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert "\\" not in c.source, f"Backslash in source: {c.source!r}"
+
+    def test_source_is_not_absolute(self):
+        """Source paths are relative, never absolute."""
+        if not VYOS_DOCS.exists():
+            pytest.skip("VyOS docs not cloned – run scripts/clone_vyos_docs.sh")
+        chunks = chunk_docs(VYOS_DOCS)
+        for c in chunks:
+            assert not c.source.startswith("/"), f"Absolute path: {c.source!r}"
