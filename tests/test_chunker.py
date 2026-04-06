@@ -519,3 +519,63 @@ class TestSplitProseBlock:
             assert tail in pieces[i + 1] or pieces[i + 1].startswith(
                 tail.lstrip()
             ), f"No overlap between piece {i} and {i + 1}"
+
+
+# ---------------------------------------------------------------------------
+# 2.6 — Small chunk merging
+# ---------------------------------------------------------------------------
+
+
+class TestMergeSmallChunks:
+    """Tests for RstChunker._merge_small_chunks()."""
+
+    def setup_method(self):
+        self.chunker = RstChunker()
+
+    def test_no_small_chunks_unchanged(self):
+        chunks = [
+            Chunk("WireGuard", "prose", "A" * 400, "src.rst"),
+            Chunk("Keypairs", "prose", "B" * 400, "src.rst"),
+        ]
+        result = self.chunker._merge_small_chunks(chunks, min_size=300)
+        assert len(result) == 2
+
+    def test_small_chunk_merges_backward(self):
+        chunks = [
+            Chunk("WireGuard", "prose", "A" * 400, "src.rst"),
+            Chunk("WireGuard", "prose", "Tiny.", "src.rst"),
+        ]
+        result = self.chunker._merge_small_chunks(chunks, min_size=300)
+        assert len(result) == 1
+        assert "Tiny." in result[0].text
+        # Heading preserved from the earlier (preceding) chunk
+        assert result[0].heading == "WireGuard"
+
+    def test_first_tiny_chunk_merges_forward(self):
+        chunks = [
+            Chunk("Intro", "prose", "Hi.", "src.rst"),
+            Chunk("WireGuard", "prose", "B" * 400, "src.rst"),
+        ]
+        result = self.chunker._merge_small_chunks(chunks, min_size=300)
+        assert len(result) == 1
+        assert "Hi." in result[0].text
+
+    def test_single_chunk_returned_as_is(self):
+        chunks = [Chunk("WireGuard", "prose", "Short.", "src.rst")]
+        result = self.chunker._merge_small_chunks(chunks, min_size=300)
+        assert len(result) == 1
+        assert result[0].text == "Short."
+
+    def test_empty_list(self):
+        assert self.chunker._merge_small_chunks([], min_size=300) == []
+
+    def test_multiple_small_chunks_merge_into_predecessor(self):
+        chunks = [
+            Chunk("A", "prose", "X" * 400, "src.rst"),
+            Chunk("A", "prose", "tiny1", "src.rst"),
+            Chunk("A", "prose", "tiny2", "src.rst"),
+        ]
+        result = self.chunker._merge_small_chunks(chunks, min_size=300)
+        assert len(result) == 1
+        assert "tiny1" in result[0].text
+        assert "tiny2" in result[0].text
