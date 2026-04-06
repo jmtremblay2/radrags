@@ -10,6 +10,11 @@ dev = [
     "black",
     "pytest",
 ]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
 
 [build-system]
 requires = ["hatchling"]

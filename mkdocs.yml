@@ -1,0 +1,17 @@
+site_name: radrags
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Usage: guide/usage.md
+  - API Reference: api/reference.md
