@@ -5,6 +5,7 @@ concrete ``RstChunker`` for reStructuredText files.  Heading-level
 constants and helper functions used by the chunkers are also exported.
 """
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -379,3 +380,33 @@ class RstChunker(DocumentChunker):
 
         flush_section()
         return sections
+
+    def _is_metadata_only(self, block: str) -> bool:
+        """Return ``True`` if *block* contains only RST metadata.
+
+        Metadata blocks include field lists (``:lastproofread:``),
+        RST labels (``.. _wireguard:``), anonymous targets (``__ …``),
+        and figure/image directives.  These carry no retrievable
+        documentation content.
+
+        Operational directives like ``.. opcmd::`` and ``.. cfgcmd::``
+        are **not** metadata — they document commands and are kept.
+
+        Args:
+            block: A single text block from ``_split_sections``.
+
+        Returns:
+            True if the block should be dropped, False otherwise.
+        """
+        trimmed = block.strip()
+        if not trimmed:
+            return True
+        if trimmed.startswith(":") and ":" in trimmed[1:]:
+            return True
+        if trimmed.startswith(".. _"):
+            return True
+        if trimmed.startswith("__ "):
+            return True
+        if re.match(r"\.\.\s+(?:figure|image)::", trimmed):
+            return True
+        return False
