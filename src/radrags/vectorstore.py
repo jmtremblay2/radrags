@@ -146,19 +146,28 @@ class ChromaStore:
         docs: list[str] = []
         metas: list[dict[str, Any]] = []
         embeds: list[list[float]] = []
+        seen_ids: set[str] = set()
 
         for chunk in chunks:
             content_hash = self._content_hash(chunk.text)
             subchunks = self._split_for_embedding(chunk.text)
 
+            piece_idx = 0
             for idx, subtext in enumerate(subchunks):
                 pairs = self._embed_with_fallback(subtext)
                 for final_text, final_embedding in pairs:
-                    sub_id = (
-                        self._content_hash(f"{content_hash}:{idx}:{final_text}")
-                        if len(subchunks) > 1
-                        else content_hash
-                    )
+                    if len(subchunks) == 1 and len(pairs) == 1:
+                        sub_id = content_hash
+                    else:
+                        sub_id = self._content_hash(
+                            f"{content_hash}:{piece_idx}:{final_text}"
+                        )
+
+                    piece_idx += 1
+
+                    if sub_id in seen_ids:
+                        continue
+                    seen_ids.add(sub_id)
 
                     ids.append(sub_id)
                     docs.append(final_text)

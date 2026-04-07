@@ -28,6 +28,9 @@ src/radrags/_version.py
 .DS_Store
 Thumbs.db
 
+# ChromaDB local databases
+chroma_db/
+
 # Cloned vendor documentation (not checked in)
 vendor/
 

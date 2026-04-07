@@ -88,6 +88,18 @@ Live preview while editing:
 ./docs.sh --open
 ```
 
+## Examples
+
+Index the VyOS 1.4.3 docs into ChromaDB and query them (requires Ollama with `nomic-embed-text`):
+
+```bash
+./scripts/clone_vyos_docs.sh              # clone VyOS docs (one-time)
+uv run python examples/vyos_index.py --build-index   # embed all RST files
+uv run python examples/vyos_index.py set up wireguard interface          # top 3 matches
+uv run python examples/vyos_index.py --top 5 set up wireguard interface  # top 5
+uv run python examples/vyos_index.py --top 2 --worst set up wireguard interface  # worst 2
+```
+
 What to track in git:
 
 | Path | Tracked | Notes |
