@@ -100,6 +100,22 @@ uv run python examples/vyos_index.py --top 5 set up wireguard interface  # top 5
 uv run python examples/vyos_index.py --top 2 --worst set up wireguard interface  # worst 2
 ```
 
+## Query Server
+
+Serve the ChromaDB collection over HTTP (requires Ollama running):
+
+```bash
+uv run python -m radrags.server --collection vyos-1.4.3
+```
+
+Then query from another terminal:
+
+```bash
+curl -s -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "configure wireguard interface", "top_k": 2}' | jq .
+```
+
 What to track in git:
 
 | Path | Tracked | Notes |
