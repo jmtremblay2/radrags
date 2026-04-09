@@ -84,3 +84,46 @@ class TestHealthEndpoint:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+
+class TestQueryValidation:
+    """POST /query rejects bad input and handles backend errors."""
+
+    def test_empty_query_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/query", json={"query": "", "top_k": 5})
+        assert resp.status_code == 422
+
+    def test_missing_query_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/query", json={"top_k": 5})
+        assert resp.status_code == 422
+
+    def test_top_k_zero_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/query", json={"query": "test", "top_k": 0})
+        assert resp.status_code == 422
+
+    def test_top_k_over_100_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/query", json={"query": "test", "top_k": 101})
+        assert resp.status_code == 422
+
+    def test_ollama_unreachable_returns_503(
+        self,
+        mock_store: MagicMock,
+    ) -> None:
+        mock_store.query.side_effect = ConnectionError("Ollama down")
+        app = create_app(store=mock_store)
+        c = TestClient(app, raise_server_exceptions=False)
+        resp = c.post("/query", json={"query": "test"})
+        assert resp.status_code == 503
+        assert "error" in resp.json()
+
+    def test_empty_collection_returns_200_empty(
+        self,
+        mock_store: MagicMock,
+    ) -> None:
+        mock_store.query.return_value = []
+        app = create_app(store=mock_store)
+        c = TestClient(app)
+        resp = c.post("/query", json={"query": "test"})
+        assert resp.status_code == 200
+        assert resp.json()["results"] == []
+        assert resp.json()["count"] == 0
