@@ -1,0 +1,8 @@
+services:
+  radrags-server:
+    build: .
+    network_mode: host
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./radrags.ini:/etc/radrags/radrags.ini:ro
+    restart: unless-stopped

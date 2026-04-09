@@ -28,6 +28,9 @@ src/radrags/_version.py
 .DS_Store
 Thumbs.db
 
+# Local config
+radrags.ini
+
 # ChromaDB local databases
 chroma_db/
 
