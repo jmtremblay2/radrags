@@ -75,3 +75,25 @@ def create_app(store: Any = None) -> FastAPI:
         return {"status": "ok"}
 
     return app
+
+
+def create_app_from_config(config_path: str | None = None) -> FastAPI:
+    """Build a FastAPI app wired to a real ChromaStore via INI config.
+
+    Args:
+        config_path: Path to an INI config file, or ``None`` for defaults.
+
+    Returns:
+        Configured ``FastAPI`` application backed by ``ChromaStore``.
+    """
+    from radrags.config import load_config
+    from radrags.vectorstore import ChromaStore
+
+    cfg = load_config(config_path)
+    store = ChromaStore(
+        db_path=cfg.db_path,
+        collection=cfg.collection,
+        embedding_model=cfg.embedding_model,
+        ollama_host=cfg.ollama_host,
+    )
+    return create_app(store=store)
