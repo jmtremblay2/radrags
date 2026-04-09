@@ -16,4 +16,5 @@ nav:
       - Usage: guide/usage.md
       - Doc-tree Traversal: guide/doc-tree.md
       - Vector Store: guide/vector-store.md
+      - Query Server: guide/server.md
   - API Reference: api/reference.md

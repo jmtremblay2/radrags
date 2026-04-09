@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+site/
+.venv/
+.git/
+.gitignore
+*.md
+docs/
+tests/
+vendor/
+vyosindex/
+examples/
+scripts/
+.agents/

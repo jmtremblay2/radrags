@@ -1,0 +1,18 @@
+[radrags]
+# Path to ChromaDB persistence directory
+# db_path = ./chroma_db
+
+# ChromaDB collection name
+# collection = radrags
+
+# Ollama embedding model
+# embedding_model = nomic-embed-text
+
+# Ollama server URL
+# ollama_host = http://127.0.0.1:11434
+
+# Server bind address
+# host = 0.0.0.0
+
+# Server port
+# port = 8000

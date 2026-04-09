@@ -116,6 +116,20 @@ curl -s -X POST http://localhost:8000/query \
   -d '{"query": "configure wireguard interface", "top_k": 2}' | jq .
 ```
 
+### Docker
+
+```bash
+cp radrags.ini.example radrags.ini   # edit as needed
+docker compose up -d
+curl -s http://localhost:8000/health | jq .
+curl -s -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "configure wireguard interface", "top_k": 2}' | jq .
+```
+
+The container uses `network_mode: host` to reach Ollama on the host machine.
+`chroma_db/` and `radrags.ini` are volume-mounted.
+
 What to track in git:
 
 | Path | Tracked | Notes |
