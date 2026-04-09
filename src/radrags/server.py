@@ -60,4 +60,8 @@ def create_app(store: Any = None) -> FastAPI:
         ]
         return QueryResponse(query=req.query, results=results, count=len(results))
 
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     return app
