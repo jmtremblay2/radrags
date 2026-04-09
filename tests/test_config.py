@@ -13,8 +13,7 @@ class TestLoadConfig:
 
     def test_loads_all_fields_from_ini(self, tmp_path: Path) -> None:
         ini = tmp_path / "test.ini"
-        ini.write_text(
-            textwrap.dedent("""\
+        ini.write_text(textwrap.dedent("""\
                 [radrags]
                 db_path = /data/my_chroma
                 collection = docs
@@ -22,8 +21,7 @@ class TestLoadConfig:
                 ollama_host = http://10.0.0.1:11434
                 host = 127.0.0.1
                 port = 9000
-            """)
-        )
+            """))
         cfg = load_config(str(ini))
         assert cfg.db_path == "/data/my_chroma"
         assert cfg.collection == "docs"
@@ -43,12 +41,10 @@ class TestLoadConfig:
 
     def test_defaults_for_missing_keys(self, tmp_path: Path) -> None:
         ini = tmp_path / "partial.ini"
-        ini.write_text(
-            textwrap.dedent("""\
+        ini.write_text(textwrap.dedent("""\
                 [radrags]
                 collection = custom
-            """)
-        )
+            """))
         cfg = load_config(str(ini))
         assert cfg.collection == "custom"
         assert cfg.db_path == "./chroma_db"
