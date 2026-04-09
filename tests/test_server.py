@@ -75,3 +75,12 @@ class TestPostQuery:
     ) -> None:
         client.post("/query", json={"query": "something"})
         mock_store.query.assert_called_once_with("something", top_k=5)
+
+
+class TestHealthEndpoint:
+    """GET /health returns status ok."""
+
+    def test_health_returns_ok(self, client: TestClient) -> None:
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
