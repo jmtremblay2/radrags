@@ -77,23 +77,61 @@ def create_app(store: Any = None) -> FastAPI:
     return app
 
 
-def create_app_from_config(config_path: str | None = None) -> FastAPI:
+def create_app_from_config(config_path: str | None = None, **overrides: Any) -> FastAPI:
     """Build a FastAPI app wired to a real ChromaStore via INI config.
 
     Args:
         config_path: Path to an INI config file, or ``None`` for defaults.
+        **overrides: Field overrides applied on top of the loaded config
+            (e.g. ``collection="vyos-1.4.3"``).
 
     Returns:
         Configured ``FastAPI`` application backed by ``ChromaStore``.
     """
-    from radrags.config import load_config
+    from dataclasses import fields
+
+    from radrags.config import ServerConfig, load_config
     from radrags.vectorstore import ChromaStore
 
     cfg = load_config(config_path)
+    valid_fields = {f.name for f in fields(ServerConfig)}
+    for key, value in overrides.items():
+        if value is not None and key in valid_fields:
+            setattr(cfg, key, value)
     store = ChromaStore(
         db_path=cfg.db_path,
         collection=cfg.collection,
         embedding_model=cfg.embedding_model,
         ollama_host=cfg.ollama_host,
     )
-    return create_app(store=store)
+    return create_app(store=store), cfg
+
+
+def _build_parser() -> "argparse.ArgumentParser":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="radrags query server")
+    parser.add_argument("--config", default=None, help="Path to INI config file")
+    parser.add_argument("--collection", default=None, help="ChromaDB collection name")
+    parser.add_argument("--db-path", default=None, help="Path to ChromaDB directory")
+    parser.add_argument("--ollama-host", default=None, help="Ollama server URL")
+    parser.add_argument("--host", default=None, help="Server bind address")
+    parser.add_argument("--port", type=int, default=None, help="Server port")
+    return parser
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    app, cfg = create_app_from_config(
+        args.config,
+        collection=args.collection,
+        db_path=args.db_path,
+        ollama_host=args.ollama_host,
+        host=args.host,
+        port=args.port,
+    )
+    uvicorn.run(app, host=cfg.host, port=cfg.port)

@@ -145,7 +145,7 @@ class TestCreateAppFromConfig:
                 host = 127.0.0.1
                 port = 9999
             """.format(db=str(tmp_path / "chroma_test"))))
-        app = create_app_from_config(str(ini))
+        app, cfg = create_app_from_config(str(ini))
         store = app.state.store
         assert store._collection.name == "testcol"
         assert store.embedding_model == "nomic-embed-text"
