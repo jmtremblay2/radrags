@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import textwrap
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from radrags.server import create_app
+from radrags.server import create_app, create_app_from_config
 
 
 @pytest.fixture()
@@ -127,3 +129,23 @@ class TestQueryValidation:
         assert resp.status_code == 200
         assert resp.json()["results"] == []
         assert resp.json()["count"] == 0
+
+
+class TestCreateAppFromConfig:
+    """create_app_from_config wires an INI config to a real ChromaStore."""
+
+    def test_creates_app_with_configured_store(self, tmp_path: Path) -> None:
+        ini = tmp_path / "test.ini"
+        ini.write_text(textwrap.dedent("""\
+                [radrags]
+                db_path = {db}
+                collection = testcol
+                embedding_model = nomic-embed-text
+                ollama_host = http://127.0.0.1:11434
+                host = 127.0.0.1
+                port = 9999
+            """.format(db=str(tmp_path / "chroma_test"))))
+        app = create_app_from_config(str(ini))
+        store = app.state.store
+        assert store._collection.name == "testcol"
+        assert store.embedding_model == "nomic-embed-text"
