@@ -2,6 +2,37 @@
 
 Based on `spec.md`. Builds on completed radrags infrastructure (chunker, vectorstore, server).
 
+## Status
+
+| Phase | Status | Notes |
+|---|---|---|
+| **Phase 1** — SSH Client & Config | **DONE** | `SSHClient` (renamed from `VyOSClient`), `CommandResult`, `AgentConfig`, `load_agent_config`. Tests in `tests/test_ssh.py`. |
+| **Phase 2** — Tools | **DONE** | `query_docs`, `show_config_tool`, `run_command`, `read_file_tool`, `TOOL_REGISTRY`, `TOOL_SCHEMAS`. All in `src/radrags/agent.py`. Tests in `tests/test_agent.py`. |
+| **Phase 3** — Agent Core | **NOT STARTED** | Next up. |
+| **Phase 4** — REPL | NOT STARTED | |
+| **Phase 5** — Integration | NOT STARTED | |
+
+### Files created/modified so far
+
+- `src/radrags/ssh.py` — `SSHClient`, `CommandResult` (generic SSH, no VyOS-specific logic)
+- `src/radrags/agent.py` — four tool functions + registry + schemas
+- `src/radrags/config.py` — added `AgentConfig` dataclass + `load_agent_config()`
+- `pyproject.toml` — added `paramiko` to dependencies
+- `tests/test_ssh.py` — 7 tests (config + SSH execute + connection errors)
+- `tests/test_agent.py` — 11 tests (all four tools + registry)
+- `examples/ssh.py` — live SSH to localhost demo
+- `examples/tools.py` — live demo of each tool
+
+### Key decisions made during execution
+
+- **Renamed `VyOSClient` → `SSHClient`** — the SSH module is generic; VyOS-specific logic (`show_config`) moved to the tools layer in `agent.py`.
+- **`show_config` is a tool, not an SSH method** — keeps SSH module reusable, VyOS knowledge lives in one place.
+- **`os.path.expanduser()` on key_path** — paramiko doesn't expand `~`, fixed in `SSHClient.__init__`.
+
+**Branch:** `feat/minimal-agent` (all commits so far on this branch)
+
+**Test count:** 142 total passing (11 agent + 7 ssh + 124 existing).
+
 ## Summary
 
 Add an interactive agent (`radrags.agent`) that uses RAG retrieval + Ollama chat + SSH to configure a VyOS router with human-in-the-loop command approval. REPL interface.
@@ -26,31 +57,25 @@ Add an interactive agent (`radrags.agent`) that uses RAG retrieval + Ollama chat
 
 ---
 
-## Phase 1 — SSH Client & Config
+## Phase 1 — SSH Client & Config ✅
 
 Branch: `feat/minimal-agent`
 
-### 1.1 AgentConfig
+### 1.1 AgentConfig ✅
 
-Test: Load INI with `[agent]` section → `AgentConfig` has `ssh_host`, `ssh_port`, `ssh_user`, `ssh_key_path`, `chat_model`. Test defaults when section is absent.
+`AgentConfig` dataclass + `load_agent_config()` in `src/radrags/config.py`. Reads `[agent]` INI section with fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_key_path`, `chat_model`, `max_iterations`.
 
-Impl: `AgentConfig` dataclass in `config.py`. Add `load_agent_config(path)`.
+### 1.2 SSH execute ✅
 
-### 1.2 SSH execute
+`SSHClient` class in `src/radrags/ssh.py` (originally `VyOSClient`, renamed to keep SSH layer generic). `execute(cmd) -> CommandResult(stdout, stderr, exit_code)`. Expands `~` in `key_path` via `os.path.expanduser()`.
 
-Test: `SSHClient.execute("echo hello")` returns `CommandResult(stdout, stderr, exit_code)`. Mock paramiko's `SSHClient`.
+### 1.3 Connection errors ✅
 
-Impl: `src/radrags/ssh.py` — `SSHClient(host, port, user, key_path)` with `execute(cmd) -> CommandResult`.
-
-### 1.3 Connection errors
-
-Test: Unreachable host → `ConnectionError` with descriptive message.
-
-Impl: Catch paramiko exceptions, re-raise as `ConnectionError`.
+Catches `paramiko.NoValidConnectionsError`, `SSHException`, `OSError` → re-raises as `ConnectionError`.
 
 ---
 
-## Phase 2 — Tools
+## Phase 2 — Tools ✅
 
 > **What this is:** The LLM agent works by calling "tools" — functions it can
 > invoke during its reasoning loop. Ollama's chat API supports tool calling
@@ -66,37 +91,25 @@ Impl: Catch paramiko exceptions, re-raise as `ConnectionError`.
 > Each tool is a plain Python function. The tool registry + schemas wire them
 > into Ollama's tool-calling format. All testable with mocked deps.
 
-### 2.1 query_docs
+### 2.1 query_docs ✅
 
-Test: `query_docs("wireguard setup", store)` returns formatted string with chunk text + source file. Mock `ChromaStore.query()`.
+`query_docs(query, store=, top_k=5)` — calls `store.query()`, formats results as numbered list with source file. Returns `"No results found."` on empty.
 
-Impl: Calls store.query(), formats results as text suitable for LLM context.
+### 2.2 show_config tool ✅
 
-### 2.2 show_config tool
+`show_config_tool(path=None, client=)` — runs `show configuration commands` (with optional grep filter) via `SSHClient.execute()`, returns stdout.
 
-Test: `show_config_tool("interfaces", client)` returns config output string. Mock SSH client.
+### 2.3 run_command ✅
 
-Impl: Calls `SSHClient.execute("show configuration commands ...")`, returns stdout.
+`run_command(command, client=, approve_fn=)` — calls `approve_fn(command)` first; if `True`, executes via SSH and returns stdout; if `False`, returns `"Declined by user."`.
 
-### 2.3 run_command (with approval gate)
+### 2.4 read_file ✅
 
-Test:
-- `approve_fn` returns `True` → command runs, returns stdout.
-- `approve_fn` returns `False` → command NOT executed, returns "Declined by user."
+`read_file_tool(path=)` — reads local file, returns contents or `"File not found: ..."`.
 
-Impl: Calls `approve_fn(cmd)` first. Only executes if approved.
+### 2.5 Tool registry & schemas ✅
 
-### 2.4 read_file
-
-Test: Returns file contents for existing file. Returns error string for missing file.
-
-Impl: Reads local file path, returns content or `"File not found: ..."`.
-
-### 2.5 Tool registry & schemas
-
-Test: `TOOL_REGISTRY` maps each tool name to its callable. `TOOL_SCHEMAS` is a list of dicts matching Ollama's tool-calling format (name, description, parameters).
-
-Impl: Define the registry dict and schema list. Schemas follow `{"type": "function", "function": {"name": ..., "description": ..., "parameters": {...}}}`.
+`TOOL_REGISTRY` maps `{"query_docs", "show_config", "run_command", "read_file"}` to callables. `TOOL_SCHEMAS` is the matching list of Ollama tool-calling format dicts.
 
 ---
 
@@ -168,12 +181,9 @@ Impl: No new production code.
 
 ---
 
-## Dependencies to add
+## Dependencies ✅
 
-```toml
-# pyproject.toml [project.dependencies]
-"paramiko"
-```
+`paramiko` added to `pyproject.toml` `[project.dependencies]`. Already synced.
 
 ## Config additions
 
