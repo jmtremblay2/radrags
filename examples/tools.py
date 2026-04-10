@@ -22,15 +22,21 @@ print(query_docs("how to generate wireguard keys", store=store))
 print(read_file_tool(path="examples/tools.py"))
 
 # --- 3. show_config ---
-# Inspect router configuration over SSH.
+# Inspect router configuration over SSH (commented out — needs VyOS router).
 # client = SSHClient(host="192.168.1.1", port=22, user="vyos", key_path="~/.ssh/id_ed25519")
 # print(show_config_tool(client=client))
 # print(show_config_tool(path="interfaces wireguard", client=client))
 
 # --- 4. run_command ---
-# Execute a command on the router. Requires human approval via approve_fn.
-# def ask_user(cmd: str) -> bool:
-#     return input(f"Run '{cmd}'? [y/N] ").strip().lower() == "y"
-#
-# print(run_command("show interfaces", client=client, approve_fn=ask_user))
-# client.close()
+# Execute a command with human approval. Here we SSH to localhost and run ls.
+client = SSHClient(
+    host="localhost", port=22, user="jtremblay", key_path="~/.ssh/id_ed25519"
+)
+
+
+def ask_user(cmd: str) -> bool:
+    return input(f"Run '{cmd}'? [y/N] ").strip().lower() == "y"
+
+
+print(run_command("ls ~/ollama/radrags/src/radrags/", client=client, approve_fn=ask_user))
+client.close()
