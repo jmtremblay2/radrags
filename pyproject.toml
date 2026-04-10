@@ -8,6 +8,7 @@ dependencies = [
     "chromadb",
     "fastapi",
     "uvicorn[standard]",
+    "paramiko",
 ]
 
 [project.optional-dependencies]
