@@ -38,17 +38,11 @@ Impl: `AgentConfig` dataclass in `config.py`. Add `load_agent_config(path)`.
 
 ### 1.2 SSH execute
 
-Test: `VyOSClient.execute("echo hello")` returns `CommandResult(stdout, stderr, exit_code)`. Mock paramiko's `SSHClient`.
+Test: `SSHClient.execute("echo hello")` returns `CommandResult(stdout, stderr, exit_code)`. Mock paramiko's `SSHClient`.
 
-Impl: `src/radrags/ssh.py` — `VyOSClient(host, port, user, key_path)` with `execute(cmd) -> CommandResult`.
+Impl: `src/radrags/ssh.py` — `SSHClient(host, port, user, key_path)` with `execute(cmd) -> CommandResult`.
 
-### 1.3 show_config
-
-Test: `client.show_config()` returns full config. `client.show_config("interfaces wireguard")` returns filtered subset. Mock SSH.
-
-Impl: `show_config(path=None)` wraps `execute("show configuration commands ...")`.
-
-### 1.4 Connection errors
+### 1.3 Connection errors
 
 Test: Unreachable host → `ConnectionError` with descriptive message.
 
@@ -57,6 +51,20 @@ Impl: Catch paramiko exceptions, re-raise as `ConnectionError`.
 ---
 
 ## Phase 2 — Tools
+
+> **What this is:** The LLM agent works by calling "tools" — functions it can
+> invoke during its reasoning loop. Ollama's chat API supports tool calling
+> natively: the model receives tool schemas (name, description, parameters),
+> decides which tool to call and with what arguments, and we execute it and
+> feed the result back. Phase 2 defines the four tools the agent can use:
+>
+> - **query_docs** — search the RAG vector store for VyOS documentation
+> - **show_config** — inspect the router's current config via SSH
+> - **run_command** — execute a command on the router (human approval required)
+> - **read_file** — read a local file (e.g. a wireguard .conf the user wants applied)
+>
+> Each tool is a plain Python function. The tool registry + schemas wire them
+> into Ollama's tool-calling format. All testable with mocked deps.
 
 ### 2.1 query_docs
 
@@ -68,7 +76,7 @@ Impl: Calls store.query(), formats results as text suitable for LLM context.
 
 Test: `show_config_tool("interfaces", client)` returns config output string. Mock SSH client.
 
-Impl: Thin wrapper over `VyOSClient.show_config()`.
+Impl: Calls `SSHClient.execute("show configuration commands ...")`, returns stdout.
 
 ### 2.3 run_command (with approval gate)
 
