@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import paramiko
@@ -30,7 +31,7 @@ class VyOSClient:
         self._host = host
         self._port = port
         self._user = user
-        self._key_path = key_path
+        self._key_path = os.path.expanduser(key_path)
         self._client = paramiko.SSHClient()
         self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
@@ -38,7 +39,7 @@ class VyOSClient:
                 hostname=host,
                 port=port,
                 username=user,
-                key_filename=key_path,
+                key_filename=self._key_path,
             )
         except (
             paramiko.ssh_exception.NoValidConnectionsError,
