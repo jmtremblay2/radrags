@@ -54,11 +54,11 @@ class TestAgentConfig:
 
 import pytest
 
-from radrags.ssh import CommandResult, VyOSClient
+from radrags.ssh import CommandResult, SSHClient
 
 
 class TestSSHExecute:
-    """VyOSClient.execute() runs a command over SSH and returns CommandResult."""
+    """SSHClient.execute() runs a command over SSH and returns CommandResult."""
 
     def test_execute_returns_command_result(self) -> None:
         mock_ssh = MagicMock()
@@ -70,7 +70,7 @@ class TestSSHExecute:
         mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
 
         with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
-            client = VyOSClient(
+            client = SSHClient(
                 host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
             )
             result = client.execute("echo hello")
@@ -90,7 +90,7 @@ class TestSSHExecute:
         mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
 
         with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
-            client = VyOSClient(
+            client = SSHClient(
                 host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
             )
             result = client.execute("badcmd")
@@ -99,53 +99,8 @@ class TestSSHExecute:
         assert "command not found" in result.stderr
 
 
-class TestShowConfig:
-    """VyOSClient.show_config() wraps execute with VyOS show commands."""
-
-    def test_show_config_full(self) -> None:
-        mock_ssh = MagicMock()
-        config_output = "set interfaces ethernet eth0 address '192.168.1.1/24'\n"
-        mock_stdout = MagicMock()
-        mock_stdout.read.return_value = config_output.encode()
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
-
-        with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
-            client = VyOSClient(
-                host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
-            )
-            result = client.show_config()
-
-        assert config_output in result
-        # Should have called the full show command
-        cmd_called = mock_ssh.exec_command.call_args[0][0]
-        assert "show configuration commands" in cmd_called
-
-    def test_show_config_filtered(self) -> None:
-        mock_ssh = MagicMock()
-        config_output = "set interfaces wireguard wg0 address '10.0.0.1/24'\n"
-        mock_stdout = MagicMock()
-        mock_stdout.read.return_value = config_output.encode()
-        mock_stdout.channel.recv_exit_status.return_value = 0
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b""
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
-
-        with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
-            client = VyOSClient(
-                host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
-            )
-            result = client.show_config("interfaces wireguard")
-
-        assert config_output in result
-        cmd_called = mock_ssh.exec_command.call_args[0][0]
-        assert "interfaces wireguard" in cmd_called
-
-
 class TestConnectionErrors:
-    """VyOSClient raises ConnectionError on SSH failures."""
+    """SSHClient raises ConnectionError on SSH failures."""
 
     def test_unreachable_host_raises_connection_error(self) -> None:
         import paramiko
@@ -157,7 +112,7 @@ class TestConnectionErrors:
 
         with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
             with pytest.raises(ConnectionError, match="10.0.0.1"):
-                VyOSClient(
+                SSHClient(
                     host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
                 )
 
@@ -171,6 +126,6 @@ class TestConnectionErrors:
 
         with patch("radrags.ssh.paramiko.SSHClient", return_value=mock_ssh):
             with pytest.raises(ConnectionError, match="Authentication"):
-                VyOSClient(
+                SSHClient(
                     host="10.0.0.1", port=22, user="vyos", key_path="/tmp/fake_key"
                 )

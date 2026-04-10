@@ -1,4 +1,4 @@
-"""SSH client for VyOS router interaction."""
+"""SSH client for remote command execution."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ class CommandResult:
     exit_code: int
 
 
-class VyOSClient:
-    """SSH client for executing commands on a VyOS router.
+class SSHClient:
+    """SSH client for executing commands on a remote host.
 
     Args:
         host: SSH hostname or IP.
@@ -63,22 +63,6 @@ class VyOSClient:
             stderr=stderr.read().decode(),
             exit_code=stdout.channel.recv_exit_status(),
         )
-
-    def show_config(self, path: str | None = None) -> str:
-        """Retrieve VyOS configuration in 'set' command format.
-
-        Args:
-            path: Optional configuration path filter
-                (e.g. ``"interfaces wireguard"``).
-
-        Returns:
-            The configuration output as a string.
-        """
-        cmd = "show configuration commands"
-        if path:
-            cmd = f"show configuration commands | grep '{path}'"
-        result = self.execute(cmd)
-        return result.stdout
 
     def close(self) -> None:
         """Close the SSH connection."""

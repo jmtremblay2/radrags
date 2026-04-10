@@ -1,8 +1,8 @@
 """Quick smoke test: SSH to localhost and run a command."""
 
-from radrags.ssh import VyOSClient
+from radrags.ssh import SSHClient
 
-client = VyOSClient(
+client = SSHClient(
     host="localhost",
     port=22,
     user="jtremblay",
